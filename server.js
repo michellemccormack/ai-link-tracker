@@ -1,0 +1,455 @@
+/**
+ * Secret Boston — Simple Tracking & Estimation Agent
+ * Stack: Node.js (Express) + SQLite (better-sqlite3)
+ * One-file MVP you can run locally and deploy to Render/Fly.io/Heroku.
+ * Features:
+ *  - Short links with redirect logging (/r/:slug)
+ *  - Landing page session tracking (views, time-on-site, funnel events)
+ *  - Click + UTM capture with unique click_id
+ *  - Lightweight dashboard (/admin) with password
+ *  - CSV export endpoints
+ *  - Simple sales estimator (clicks * CR * AOV) with config per partner
+ *  - Privacy friendly (IP hashed, no PII), CORS-safe, uses sendBeacon
+ *
+ * Usage
+ *  1) npm init -y && npm i express better-sqlite3 cookie-parser nanoid basic-auth
+ *  2) node server.js
+ *  3) Open http://localhost:3000
+ *  4) Create a short link at /admin -> test /r/demo -> redirects + logs
+ *
+ * Deploy
+ *  - Create a repo (GitHub), push this file as server.js plus a package.json
+ *  - On Render/Fly/Heroku, set env vars below and run: node server.js
+ */
+
+const express = require('express');
+const Database = require('better-sqlite3');
+const cookieParser = require('cookie-parser');
+const basicAuth = require('basic-auth');
+const crypto = require('crypto');
+const { customAlphabet } = require('nanoid');
+
+// ---------- Config ----------
+const PORT = process.env.PORT || 3000;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme';
+const DB_PATH = process.env.DB_PATH || './tracker.db';
+const SITE_NAME = process.env.SITE_NAME || 'Secret Boston';
+
+// Estimator defaults (you can override per partner/campaign in /admin)
+const DEFAULT_CR = Number(process.env.DEFAULT_CR || 0.008); // 0.8%
+const DEFAULT_AOV = Number(process.env.DEFAULT_AOV || 45);   // $45 avg order value
+
+// ---------- Init DB ----------
+const db = new Database(DB_PATH);
+db.pragma('journal_mode = WAL');
+
+db.prepare(`CREATE TABLE IF NOT EXISTS links (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT UNIQUE,
+  target TEXT NOT NULL,
+  partner TEXT,
+  campaign TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  cr REAL,
+  aov REAL
+)`).run();
+
+db.prepare(`CREATE TABLE IF NOT EXISTS clicks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT,
+  click_id TEXT,
+  ts DATETIME DEFAULT CURRENT_TIMESTAMP,
+  ip_hash TEXT,
+  ua TEXT,
+  referer TEXT,
+  utm_source TEXT,
+  utm_medium TEXT,
+  utm_campaign TEXT,
+  user_session TEXT
+)`).run();
+
+db.prepare(`CREATE TABLE IF NOT EXISTS events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT,
+  ts DATETIME DEFAULT CURRENT_TIMESTAMP,
+  user_session TEXT,
+  url TEXT,
+  referer TEXT,
+  duration_ms INTEGER,
+  data TEXT
+)`).run();
+
+// optional: store simple pageviews (redundant with events type=pageview)
+db.prepare(`CREATE TABLE IF NOT EXISTS pageviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts DATETIME DEFAULT CURRENT_TIMESTAMP,
+  user_session TEXT,
+  url TEXT,
+  referer TEXT
+)`).run();
+
+// ---------- Helpers ----------
+const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 12);
+
+function requireAdmin(req, res, next) {
+  const user = basicAuth(req);
+  if (!user || user.pass !== ADMIN_PASSWORD) {
+    res.set('WWW-Authenticate', 'Basic realm="admin"');
+    return res.status(401).send('Auth required');
+  }
+  next();
+}
+
+function ipHash(req) {
+  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  const ua = req.headers['user-agent'] || '';
+  const salt = new Date().toISOString().slice(0,10); // rotate daily
+  return crypto.createHash('sha256').update(ip + ua + salt).digest('hex').slice(0,32);
+}
+
+function html(head, body) {
+  return `<!doctype html>
+  <html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${SITE_NAME} Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+      :root { --bg:#0b0f17; --fg:#e6edf3; --muted:#98a2b3; --card:#111827; --accent:#4f46e5; }
+      *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont;background:var(--bg);color:var(--fg)}
+      .container{max-width:980px;margin:40px auto;padding:0 20px}
+      .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:20px;margin-bottom:18px}
+      h1{font-size:28px;margin:0 0 10px} h2{font-size:18px;margin:0 0 10px;color:var(--muted)}
+      input,select,button,textarea{background:#0b1220;color:var(--fg);border:1px solid #263041;border-radius:10px;padding:10px}
+      label{display:block;margin:8px 0 4px;color:#cbd5e1}
+      table{width:100%;border-collapse:collapse}
+      th,td{border-bottom:1px solid #1f2937;padding:10px;text-align:left}
+      .btn{background:var(--accent);border:none;padding:10px 14px;border-radius:10px;font-weight:600;cursor:pointer}
+      .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+      .muted{color:var(--muted)}
+      .tag{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #2b3444;color:#9aa4b2;font-size:12px;margin-left:8px}
+      .pill{background:#151c2c;border:1px solid #283349;border-radius:999px;padding:6px 10px}
+      code{background:#0e1422;border:1px solid #1f2937;padding:2px 6px;border-radius:6px}
+    </style>
+    ${head||''}
+  </head>
+  <body>
+    <div class="container">${body}</div>
+  </body>
+  </html>`;
+}
+
+// ---------- App ----------
+const app = express();
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(cookieParser());
+
+// Session cookie for events/time-on-site
+app.use((req,res,next)=>{
+  if (!req.cookies.sb_session) {
+    res.cookie('sb_session', nanoid(), { httpOnly: false, sameSite: 'Lax' });
+  }
+  next();
+});
+
+// ---------- Landing page (example) ----------
+app.get('/', (req,res)=>{
+  const links = db.prepare('SELECT slug,target,partner,campaign,cr,aov FROM links ORDER BY id DESC LIMIT 20').all();
+  const body = `
+  <div class="card">
+    <h1>${SITE_NAME} — Tracking & Estimation Agent <span class="tag">MVP</span></h1>
+    <h2>Short links, page analytics, and sales estimation (no partner access required)</h2>
+    <p class="muted">This landing page logs views, time-on-site, and funnel events. Use <code>/r/:slug</code> links in your content to track clicks.</p>
+  </div>
+  <div class="grid">
+    <div class="card">
+      <h2>Create a short link</h2>
+      <form method="POST" action="/admin/links">
+        <label>Slug (e.g. <code>todaytix-nov</code>)</label>
+        <input name="slug" required placeholder="todaytix-nov" style="width:100%" />
+        <label>Target URL (where to redirect)</label>
+        <input name="target" required placeholder="https://todaytix.com/secretboston" style="width:100%" />
+        <div class="grid">
+          <div>
+            <label>Partner</label>
+            <input name="partner" placeholder="TodayTix" style="width:100%" />
+          </div>
+          <div>
+            <label>Campaign</label>
+            <input name="campaign" placeholder="Calendar Nov 12" style="width:100%" />
+          </div>
+        </div>
+        <div class="grid">
+          <div>
+            <label>Assumed CR (default ${DEFAULT_CR})</label>
+            <input name="cr" type="number" step="0.0001" placeholder="0.008" style="width:100%" />
+          </div>
+          <div>
+            <label>Assumed AOV (default ${DEFAULT_AOV})</label>
+            <input name="aov" type="number" step="0.01" placeholder="45" style="width:100%" />
+          </div>
+        </div>
+        <p><button class="btn" type="submit">Create link</button></p>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Recent links</h2>
+      <table>
+        <thead><tr><th>Slug</th><th>Target</th><th>Partner</th><th>Campaign</th><th>CR</th><th>AOV</th></tr></thead>
+        <tbody>
+          ${links.map(l=>`<tr>
+            <td><a href="/r/${l.slug}" target="_blank">/r/${l.slug}</a></td>
+            <td class="muted" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.target}</td>
+            <td>${l.partner||''}</td>
+            <td>${l.campaign||''}</td>
+            <td>${(l.cr??DEFAULT_CR)}</td>
+            <td>$${(l.aov??DEFAULT_AOV)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Diagnostics</h2>
+    <p class="muted">This page sends <em>pageview</em> on load and <em>time_on_site</em> on unload using <code>navigator.sendBeacon</code>.</p>
+    <pre class="pill">Session: ${req.cookies.sb_session || '(new)'}\nUser-Agent: ${(req.headers['user-agent']||'').slice(0,80)}...</pre>
+  </div>
+
+  <script>
+    (function(){
+      const start = Date.now();
+      const session = (document.cookie.match(/(?:^|; )sb_session=([^;]+)/)||[])[1]||'';
+      const payload = (type, extra={})=>JSON.stringify({
+        type,
+        url: location.href,
+        referer: document.referrer||'',
+        user_session: session,
+        duration_ms: type==='time_on_site'? (Date.now()-start): undefined,
+        data: extra
+      });
+      // pageview
+      navigator.sendBeacon('/api/event', payload('pageview'));
+      // time on site
+      window.addEventListener('visibilitychange', function(){
+        if (document.visibilityState==='hidden') {
+          navigator.sendBeacon('/api/event', payload('time_on_site'));
+        }
+      });
+      // demo funnel buttons (add your own data-action attributes)
+      document.addEventListener('click', function(e){
+        const t=e.target.closest('[data-funnel]');
+        if (t){
+          navigator.sendBeacon('/api/event', payload('funnel', {step:t.getAttribute('data-funnel'), label:t.textContent.trim()}));
+        }
+      });
+    })();
+  </script>
+  `;
+  res.send(html('', body));
+});
+
+// ---------- Create link (admin-lite from public home) ----------
+app.post('/admin/links', (req,res)=>{
+  const { slug, target, partner, campaign, cr, aov } = req.body;
+  try {
+    db.prepare('INSERT INTO links (slug,target,partner,campaign,cr,aov) VALUES (?,?,?,?,?,?)')
+      .run(slug.trim(), target.trim(), partner||null, campaign||null,
+           cr? Number(cr): null,
+           aov? Number(aov): null);
+    res.redirect('/');
+  } catch (e) {
+    res.status(400).send('Error creating link: ' + e.message);
+  }
+});
+
+// ---------- Redirect + click logging ----------
+app.get('/r/:slug', (req,res)=>{
+  const row = db.prepare('SELECT * FROM links WHERE slug = ?').get(req.params.slug);
+  if (!row) return res.status(404).send('Not found');
+
+  const clickId = nanoid();
+  const { utm_source, utm_medium, utm_campaign } = req.query;
+  db.prepare(`INSERT INTO clicks (slug, click_id, ip_hash, ua, referer, utm_source, utm_medium, utm_campaign, user_session)
+              VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run(row.slug, clickId, ipHash(req), req.headers['user-agent']||'', req.headers.referer||'',
+         utm_source||null, utm_medium||null, utm_campaign||null, req.cookies.sb_session||null);
+
+  // Append click_id downstream so partners can optionally return it in reports
+  const url = new URL(row.target);
+  url.searchParams.set('sb_click', clickId);
+  if (utm_source) url.searchParams.set('utm_source', utm_source);
+  if (utm_medium) url.searchParams.set('utm_medium', utm_medium);
+  if (utm_campaign) url.searchParams.set('utm_campaign', utm_campaign);
+
+  res.redirect(302, url.toString());
+});
+
+// ---------- Event ingest (pageview, time_on_site, funnel, custom) ----------
+app.post('/api/event', (req,res)=>{
+  try {
+    const { type, user_session, url, referer, duration_ms, data } = req.body || {};
+    if (!type) return res.status(400).json({ ok:false, error:'missing type' });
+    const dataStr = data ? JSON.stringify(data).slice(0,2000) : null;
+    db.prepare('INSERT INTO events (type,user_session,url,referer,duration_ms,data) VALUES (?,?,?,?,?,?)')
+      .run(type, user_session||null, url||null, referer||null, duration_ms||null, dataStr);
+    if (type==='pageview') {
+      db.prepare('INSERT INTO pageviews (user_session,url,referer) VALUES (?,?,?)')
+        .run(user_session||null, url||null, referer||null);
+    }
+    res.json({ ok:true });
+  } catch (e) {
+    res.status(500).json({ ok:false, error: e.message });
+  }
+});
+
+// ---------- Admin dashboard ----------
+app.get('/admin', requireAdmin, (req,res)=>{
+  const totals = db.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM clicks) AS clicks,
+      (SELECT COUNT(*) FROM pageviews) AS views,
+      (SELECT ROUND(AVG(duration_ms),0) FROM events WHERE type='time_on_site') AS avg_ms
+  `).get();
+
+  const bySlug = db.prepare(`
+    SELECT l.slug, l.partner, l.campaign,
+           COUNT(c.id) AS clicks,
+           COALESCE(l.cr, ?) AS cr,
+           COALESCE(l.aov, ?) AS aov,
+           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) , 2) AS est_sales,
+           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS est_revenue
+    FROM links l
+    LEFT JOIN clicks c ON c.slug = l.slug
+    GROUP BY l.slug
+    ORDER BY clicks DESC
+  `).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV);
+
+  const latestClicks = db.prepare(`SELECT slug, click_id, ts, utm_source, utm_medium, utm_campaign FROM clicks ORDER BY id DESC LIMIT 25`).all();
+  const latestEvents = db.prepare(`SELECT type, ts, duration_ms, substr(url,1,60) AS url FROM events ORDER BY id DESC LIMIT 25`).all();
+
+  const body = `
+  <div class="card"><h1>Admin Dashboard</h1>
+    <p class="muted">Password-protected. Set <code>ADMIN_PASSWORD</code> env var for production.</p>
+  </div>
+  <div class="grid">
+    <div class="card">
+      <h2>Summary</h2>
+      <table>
+        <tr><td>Total Views</td><td>${totals.views||0}</td></tr>
+        <tr><td>Total Clicks</td><td>${totals.clicks||0}</td></tr>
+        <tr><td>Avg Time on Site</td><td>${totals.avg_ms? (Math.round(totals.avg_ms/100)/10)+'s':'—'}</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Per Link — Estimated Sales & Revenue</h2>
+      <table>
+        <thead><tr><th>Slug</th><th>Partner</th><th>Campaign</th><th>Clicks</th><th>CR</th><th>AOV</th><th>Est. Sales</th><th>Est. Revenue</th></tr></thead>
+        <tbody>
+          ${bySlug.map(r=>`<tr>
+            <td><code>${r.slug}</code></td>
+            <td>${r.partner||''}</td>
+            <td>${r.campaign||''}</td>
+            <td>${r.clicks}</td>
+            <td>${Number(r.cr).toFixed(3)}</td>
+            <td>$${Number(r.aov).toFixed(2)}</td>
+            <td>${r.est_sales}</td>
+            <td>$${r.est_revenue}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <p class="muted">Estimates use CR and AOV per link if set, otherwise defaults (${DEFAULT_CR}, $${DEFAULT_AOV}).</p>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Latest Clicks</h2>
+      <table>
+        <thead><tr><th>Slug</th><th>Click ID</th><th>Time</th><th>UTM</th></tr></thead>
+        <tbody>
+          ${latestClicks.map(c=>`<tr>
+            <td>${c.slug}</td>
+            <td><code>${c.click_id}</code></td>
+            <td>${c.ts}</td>
+            <td class="muted">${[c.utm_source,c.utm_medium,c.utm_campaign].filter(Boolean).join(' / ')||'—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Latest Events</h2>
+      <table>
+        <thead><tr><th>Type</th><th>Time</th><th>Duration</th><th>URL</th></tr></thead>
+        <tbody>
+          ${latestEvents.map(e=>`<tr>
+            <td>${e.type}</td>
+            <td>${e.ts}</td>
+            <td>${e.duration_ms? (e.duration_ms+' ms'):'—'}</td>
+            <td class="muted">${e.url||''}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Exports</h2>
+    <p><a class="btn" href="/admin/export/clicks.csv">Download clicks.csv</a>
+       <a class="btn" href="/admin/export/events.csv" style="margin-left:8px">Download events.csv</a>
+       <a class="btn" href="/admin/export/estimates.csv" style="margin-left:8px">Download estimates.csv</a></p>
+  </div>`;
+
+  res.send(html('', body));
+});
+
+// ---------- CSV exports ----------
+function toCSV(rows){
+  if (!rows.length) return '';
+  const headers = Object.keys(rows[0]);
+  const esc = v => (v==null?'':String(v).replace(/"/g,'""'));
+  const lines = [headers.join(',')].concat(rows.map(r=>headers.map(h=>`"${esc(r[h])}"`).join(',')));
+  return lines.join('\n');
+}
+
+app.get('/admin/export/clicks.csv', requireAdmin, (req,res)=>{
+  const rows = db.prepare('SELECT * FROM clicks ORDER BY id DESC').all();
+  res.setHeader('Content-Type','text/csv');
+  res.send(toCSV(rows));
+});
+
+app.get('/admin/export/events.csv', requireAdmin, (req,res)=>{
+  const rows = db.prepare('SELECT * FROM events ORDER BY id DESC').all();
+  res.setHeader('Content-Type','text/csv');
+  res.send(toCSV(rows));
+});
+
+app.get('/admin/export/estimates.csv', requireAdmin, (req,res)=>{
+  const rows = db.prepare(`
+    SELECT l.slug, l.partner, l.campaign,
+           COUNT(c.id) AS clicks,
+           COALESCE(l.cr, ?) AS cr,
+           COALESCE(l.aov, ?) AS aov,
+           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) , 2) AS est_sales,
+           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS est_revenue
+    FROM links l
+    LEFT JOIN clicks c ON c.slug = l.slug
+    GROUP BY l.slug
+    ORDER BY clicks DESC
+  `).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV);
+  res.setHeader('Content-Type','text/csv');
+  res.send(toCSV(rows));
+});
+
+// ---------- Simple health ----------
+app.get('/health', (req,res)=>res.json({ ok:true }));
+
+// ---------- Start ----------
+app.listen(PORT, ()=>{
+  console.log(`\n${SITE_NAME} Tracker running on http://localhost:${PORT}`);
+  console.log(`Admin: http://localhost:${PORT}/admin  (password: ${ADMIN_PASSWORD})`);
+});
