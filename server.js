@@ -1,25 +1,6 @@
 /**
  * Secret Boston — Simple Tracking & Estimation Agent
- * Stack: Node.js (Express) + SQLite (better-sqlite3)
- * One-file MVP you can run locally and deploy to Render/Fly.io/Heroku.
- * Features:
- *  - Short links with redirect logging (/r/:slug)
- *  - Landing page session tracking (views, time-on-site, funnel events)
- *  - Click + UTM capture with unique click_id
- *  - Lightweight dashboard (/admin) with password
- *  - CSV export endpoints
- *  - Simple sales estimator (clicks * CR * AOV) with config per partner
- *  - Privacy friendly (IP hashed, no PII), CORS-safe, uses sendBeacon
- *
- * Usage
- *  1) npm init -y && npm i express better-sqlite3 cookie-parser nanoid basic-auth
- *  2) node server.js
- *  3) Open http://localhost:3000
- *  4) Create a short link at /admin -> test /r/demo -> redirects + logs
- *
- * Deploy
- *  - Create a repo (GitHub), push this file as server.js plus a package.json
- *  - On Render/Fly/Heroku, set env vars below and run: node server.js
+ * Node.js (Express) + SQLite (better-sqlite3)
  */
 
 const express = require('express');
@@ -35,9 +16,8 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme';
 const DB_PATH = process.env.DB_PATH || './tracker.db';
 const SITE_NAME = process.env.SITE_NAME || 'Secret Boston';
 
-// Estimator defaults (you can override per partner/campaign in /admin)
 const DEFAULT_CR = Number(process.env.DEFAULT_CR || 0.008); // 0.8%
-const DEFAULT_AOV = Number(process.env.DEFAULT_AOV || 45);   // $45 avg order value
+const DEFAULT_AOV = Number(process.env.DEFAULT_AOV || 45);   // $45
 
 // ---------- Init DB ----------
 const db = new Database(DB_PATH);
@@ -79,7 +59,6 @@ db.prepare(`CREATE TABLE IF NOT EXISTS events (
   data TEXT
 )`).run();
 
-// optional: store simple pageviews (redundant with events type=pageview)
 db.prepare(`CREATE TABLE IF NOT EXISTS pageviews (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   ts DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -132,6 +111,7 @@ function html(head, body) {
       .tag{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #2b3444;color:#9aa4b2;font-size:12px;margin-left:8px}
       .pill{background:#151c2c;border:1px solid #283349;border-radius:999px;padding:6px 10px}
       code{background:#0e1422;border:1px solid #1f2937;padding:2px 6px;border-radius:6px}
+      a { color:#38bdf8; text-decoration:none }
     </style>
     ${head||''}
   </head>
@@ -139,6 +119,32 @@ function html(head, body) {
     <div class="container">${body}</div>
   </body>
   </html>`;
+}
+
+// ---- Flexible parsers (accept %, words, $ signs, etc.) ----
+function parseConversionRate(input) {
+  if (input == null || input === '') return DEFAULT_CR;
+  let s = String(input).toLowerCase().replace(/percent/g,'').replace(/\s/g,'');
+  s = s.replace(/[^0-9.+-]/g, ''); // remove % and other symbols, keep dot and sign
+  if (s === '' || s === '.' || s === '-.' || s === '+.') return DEFAULT_CR;
+  let x = Number(s);
+  if (!isFinite(x)) return DEFAULT_CR;
+
+  // Rules:
+  // - If x > 1, treat as percent (e.g., 8 => 8% => 0.08)
+  // - If 0.2 < x <= 1, treat as percent in whole numbers (e.g., 0.8 => 0.8% => 0.008)
+  // - If 0 < x <= 0.2, assume it's already a decimal fraction (e.g., 0.01 => 1%)
+  if (x > 1) return x / 100;
+  if (x > 0.2) return x / 100;   // 0.8 => 0.008 (0.8%)
+  if (x <= 0) return DEFAULT_CR;
+  return x; // e.g., 0.01 or 0.008 entered intentionally
+}
+
+function parseMoney(input) {
+  if (input == null || input === '') return DEFAULT_AOV;
+  const s = String(input).replace(/[^0-9.]/g,''); // strip $ and commas
+  const x = Number(s);
+  return isFinite(x) && x > 0 ? x : DEFAULT_AOV;
 }
 
 // ---------- App ----------
@@ -155,14 +161,13 @@ app.use((req,res,next)=>{
   next();
 });
 
-// ---------- Landing page (example) ----------
+// ---------- Landing page ----------
 app.get('/', (req,res)=>{
   const links = db.prepare('SELECT slug,target,partner,campaign,cr,aov FROM links ORDER BY id DESC LIMIT 20').all();
   const body = `
   <div class="card">
     <h1>${SITE_NAME} — Tracking & Estimation Agent <span class="tag">MVP</span></h1>
     <h2>Short links, page analytics, and sales estimation (no partner access required)</h2>
-    <p class="muted">This landing page logs views, time-on-site, and funnel events. Use <code>/r/:slug</code> links in your content to track clicks.</p>
   </div>
   <div class="grid">
     <div class="card">
@@ -184,14 +189,17 @@ app.get('/', (req,res)=>{
         </div>
         <div class="grid">
           <div>
-           <label>Assumed Conversion Rate (default ${(DEFAULT_CR * 100).toFixed(2)}%)</label>
-<input name="cr" type="number" step="0.0001" placeholder="0.008" style="width:100%" />
-<p class="muted" style="margin:6px 0 0">Enter as a decimal (e.g., 0.008 = 0.8%).</p>
-
-<label>Assumed Average Order Value (default $${DEFAULT_AOV})</label>
-<input name="aov" type="number" step="0.01" placeholder="45" style="width:100%" />
+            <label>Enter Assumed Conversion Rate</label>
+            <input name="cr" type="text" inputmode="decimal" placeholder="1%" style="width:100%" />
+          </div>
+          <div>
+            <label>Assumed Average Order Value</label>
+            <input name="aov" type="text" inputmode="decimal" placeholder="$45" style="width:100%" />
           </div>
         </div>
+        <p class="muted" style="margin-top:8px">
+          Examples: <code>1%</code>, <code>.8%</code>, <code>1</code>, <code>.8</code>, or <code>0.008</code>. AOV accepts <code>$45</code> or <code>45</code>.
+        </p>
         <p><button class="btn" type="submit">Create link</button></p>
       </form>
     </div>
@@ -207,7 +215,7 @@ app.get('/', (req,res)=>{
             <td>${l.partner||''}</td>
             <td>${l.campaign||''}</td>
             <td>${(((l.cr??DEFAULT_CR) * 100).toFixed(2))}%</td>
-<td>$${(l.aov??DEFAULT_AOV)}</td>
+            <td>$${(l.aov??DEFAULT_AOV)}</td>
           </tr>`).join('')}
         </tbody>
       </table>
@@ -219,48 +227,20 @@ app.get('/', (req,res)=>{
     <p class="muted">This page sends <em>pageview</em> on load and <em>time_on_site</em> on unload using <code>navigator.sendBeacon</code>.</p>
     <pre class="pill">Session: ${req.cookies.sb_session || '(new)'}\nUser-Agent: ${(req.headers['user-agent']||'').slice(0,80)}...</pre>
   </div>
-
-  <script>
-    (function(){
-      const start = Date.now();
-      const session = (document.cookie.match(/(?:^|; )sb_session=([^;]+)/)||[])[1]||'';
-      const payload = (type, extra={})=>JSON.stringify({
-        type,
-        url: location.href,
-        referer: document.referrer||'',
-        user_session: session,
-        duration_ms: type==='time_on_site'? (Date.now()-start): undefined,
-        data: extra
-      });
-      // pageview
-      navigator.sendBeacon('/api/event', payload('pageview'));
-      // time on site
-      window.addEventListener('visibilitychange', function(){
-        if (document.visibilityState==='hidden') {
-          navigator.sendBeacon('/api/event', payload('time_on_site'));
-        }
-      });
-      // demo funnel buttons (add your own data-action attributes)
-      document.addEventListener('click', function(e){
-        const t=e.target.closest('[data-funnel]');
-        if (t){
-          navigator.sendBeacon('/api/event', payload('funnel', {step:t.getAttribute('data-funnel'), label:t.textContent.trim()}));
-        }
-      });
-    })();
-  </script>
   `;
   res.send(html('', body));
 });
 
-// ---------- Create link (admin-lite from public home) ----------
+// ---------- Create link ----------
 app.post('/admin/links', (req,res)=>{
   const { slug, target, partner, campaign, cr, aov } = req.body;
+
+  const parsedCR  = cr === undefined ? DEFAULT_CR : parseConversionRate(cr);
+  const parsedAOV = aov === undefined ? DEFAULT_AOV : parseMoney(aov);
+
   try {
     db.prepare('INSERT INTO links (slug,target,partner,campaign,cr,aov) VALUES (?,?,?,?,?,?)')
-      .run(slug.trim(), target.trim(), partner||null, campaign||null,
-           cr? Number(cr): null,
-           aov? Number(aov): null);
+      .run(slug.trim(), target.trim(), partner||null, campaign||null, parsedCR, parsedAOV);
     res.redirect('/');
   } catch (e) {
     res.status(400).send('Error creating link: ' + e.message);
@@ -279,7 +259,6 @@ app.get('/r/:slug', (req,res)=>{
     .run(row.slug, clickId, ipHash(req), req.headers['user-agent']||'', req.headers.referer||'',
          utm_source||null, utm_medium||null, utm_campaign||null, req.cookies.sb_session||null);
 
-  // Append click_id downstream so partners can optionally return it in reports
   const url = new URL(row.target);
   url.searchParams.set('sb_click', clickId);
   if (utm_source) url.searchParams.set('utm_source', utm_source);
@@ -289,7 +268,7 @@ app.get('/r/:slug', (req,res)=>{
   res.redirect(302, url.toString());
 });
 
-// ---------- Event ingest (pageview, time_on_site, funnel, custom) ----------
+// ---------- Event ingest ----------
 app.post('/api/event', (req,res)=>{
   try {
     const { type, user_session, url, referer, duration_ms, data } = req.body || {};
@@ -319,10 +298,10 @@ app.get('/admin', requireAdmin, (req,res)=>{
   const bySlug = db.prepare(`
     SELECT l.slug, l.partner, l.campaign,
            COUNT(c.id) AS clicks,
-           COALESCE(l.cr, ?) AS cr,
-           COALESCE(l.aov, ?) AS aov,
-           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) , 2) AS est_sales,
-           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS est_revenue
+           COALESCE(l.cr, ?) AS conversion_rate,
+           COALESCE(l.aov, ?) AS average_order_value,
+           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) , 2) AS estimated_sales,
+           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS estimated_revenue
     FROM links l
     LEFT JOIN clicks c ON c.slug = l.slug
     GROUP BY l.slug
@@ -334,7 +313,7 @@ app.get('/admin', requireAdmin, (req,res)=>{
 
   const body = `
   <div class="card"><h1>Admin Dashboard</h1>
-    <p class="muted">Password-protected. Set <code>ADMIN_PASSWORD</code> env var for production.</p>
+    <p class="muted">Set <code>ADMIN_PASSWORD</code> in env vars for production.</p>
   </div>
   <div class="grid">
     <div class="card">
@@ -348,24 +327,21 @@ app.get('/admin', requireAdmin, (req,res)=>{
     <div class="card">
       <h2>Per Link — Estimated Sales & Revenue</h2>
       <table>
-        <td>${Number(r.cr).toFixed(3)}</td>
-<td>$${Number(r.aov).toFixed(2)}</td>
+        <thead><tr><th>Slug</th><th>Partner</th><th>Campaign</th><th>Clicks</th><th>Conversion Rate</th><th>Average Order Value</th><th>Estimated Sales</th><th>Estimated Revenue</th></tr></thead>
         <tbody>
           ${bySlug.map(r=>`<tr>
             <td><code>${r.slug}</code></td>
             <td>${r.partner||''}</td>
             <td>${r.campaign||''}</td>
             <td>${r.clicks}</td>
-           <td>${(Number(r.cr) * 100).toFixed(2)}%</td>
-<td>$${Number(r.aov).toFixed(2)}</td>
-            <td>${r.est_sales}</td>
-            <td>$${r.est_revenue}</td>
+            <td>${(Number(r.conversion_rate) * 100).toFixed(2)}%</td>
+            <td>$${Number(r.average_order_value).toFixed(2)}</td>
+            <td>${r.estimated_sales}</td>
+            <td>$${r.estimated_revenue}</td>
           </tr>`).join('')}
         </tbody>
       </table>
-      <p class="muted">
-  Estimates use the per-link <strong>Conversion Rate</strong> and <strong>Average Order Value</strong> when set; otherwise defaults are ${(DEFAULT_CR*100).toFixed(2)}% and $${DEFAULT_AOV}.
-</p>
+    </div>
   </div>
 
   <div class="grid">
@@ -405,7 +381,6 @@ app.get('/admin', requireAdmin, (req,res)=>{
        <a class="btn" href="/admin/export/events.csv" style="margin-left:8px">Download events.csv</a>
        <a class="btn" href="/admin/export/estimates.csv" style="margin-left:8px">Download estimates.csv</a></p>
   </div>`;
-
   res.send(html('', body));
 });
 
@@ -434,10 +409,10 @@ app.get('/admin/export/estimates.csv', requireAdmin, (req,res)=>{
   const rows = db.prepare(`
     SELECT l.slug, l.partner, l.campaign,
            COUNT(c.id) AS clicks,
-           COALESCE(l.cr, ?) AS cr,
-           COALESCE(l.aov, ?) AS aov,
-           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) , 2) AS est_sales,
-           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS est_revenue
+           COALESCE(l.cr, ?) AS conversion_rate,
+           COALESCE(l.aov, ?) AS average_order_value,
+           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) , 2) AS estimated_sales,
+           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS estimated_revenue
     FROM links l
     LEFT JOIN clicks c ON c.slug = l.slug
     GROUP BY l.slug
@@ -447,7 +422,7 @@ app.get('/admin/export/estimates.csv', requireAdmin, (req,res)=>{
   res.send(toCSV(rows));
 });
 
-// ---------- Simple health ----------
+// ---------- Health ----------
 app.get('/health', (req,res)=>res.json({ ok:true }));
 
 // ---------- Start ----------
