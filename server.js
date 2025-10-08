@@ -184,12 +184,12 @@ app.get('/', (req,res)=>{
         </div>
         <div class="grid">
           <div>
-            <label>Assumed CR (default ${DEFAULT_CR})</label>
-            <input name="cr" type="number" step="0.0001" placeholder="0.008" style="width:100%" />
-          </div>
-          <div>
-            <label>Assumed AOV (default ${DEFAULT_AOV})</label>
-            <input name="aov" type="number" step="0.01" placeholder="45" style="width:100%" />
+           <label>Assumed Conversion Rate (default ${(DEFAULT_CR * 100).toFixed(2)}%)</label>
+<input name="cr" type="number" step="0.0001" placeholder="0.008" style="width:100%" />
+<p class="muted" style="margin:6px 0 0">Enter as a decimal (e.g., 0.008 = 0.8%).</p>
+
+<label>Assumed Average Order Value (default $${DEFAULT_AOV})</label>
+<input name="aov" type="number" step="0.01" placeholder="45" style="width:100%" />
           </div>
         </div>
         <p><button class="btn" type="submit">Create link</button></p>
@@ -199,15 +199,15 @@ app.get('/', (req,res)=>{
     <div class="card">
       <h2>Recent links</h2>
       <table>
-        <thead><tr><th>Slug</th><th>Target</th><th>Partner</th><th>Campaign</th><th>CR</th><th>AOV</th></tr></thead>
+        <thead><tr><th>Slug</th><th>Target</th><th>Partner</th><th>Campaign</th><th>Conversion Rate</th><th>Average Order Value</th></tr></thead>
         <tbody>
           ${links.map(l=>`<tr>
             <td><a href="/r/${l.slug}" target="_blank">/r/${l.slug}</a></td>
             <td class="muted" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.target}</td>
             <td>${l.partner||''}</td>
             <td>${l.campaign||''}</td>
-            <td>${(l.cr??DEFAULT_CR)}</td>
-            <td>$${(l.aov??DEFAULT_AOV)}</td>
+            <td>${(((l.cr??DEFAULT_CR) * 100).toFixed(2))}%</td>
+<td>$${(l.aov??DEFAULT_AOV)}</td>
           </tr>`).join('')}
         </tbody>
       </table>
@@ -348,22 +348,24 @@ app.get('/admin', requireAdmin, (req,res)=>{
     <div class="card">
       <h2>Per Link — Estimated Sales & Revenue</h2>
       <table>
-        <thead><tr><th>Slug</th><th>Partner</th><th>Campaign</th><th>Clicks</th><th>CR</th><th>AOV</th><th>Est. Sales</th><th>Est. Revenue</th></tr></thead>
+        <td>${Number(r.cr).toFixed(3)}</td>
+<td>$${Number(r.aov).toFixed(2)}</td>
         <tbody>
           ${bySlug.map(r=>`<tr>
             <td><code>${r.slug}</code></td>
             <td>${r.partner||''}</td>
             <td>${r.campaign||''}</td>
             <td>${r.clicks}</td>
-            <td>${Number(r.cr).toFixed(3)}</td>
-            <td>$${Number(r.aov).toFixed(2)}</td>
+           <td>${(Number(r.cr) * 100).toFixed(2)}%</td>
+<td>$${Number(r.aov).toFixed(2)}</td>
             <td>${r.est_sales}</td>
             <td>$${r.est_revenue}</td>
           </tr>`).join('')}
         </tbody>
       </table>
-      <p class="muted">Estimates use CR and AOV per link if set, otherwise defaults (${DEFAULT_CR}, $${DEFAULT_AOV}).</p>
-    </div>
+      <p class="muted">
+  Estimates use the per-link <strong>Conversion Rate</strong> and <strong>Average Order Value</strong> when set; otherwise defaults are ${(DEFAULT_CR*100).toFixed(2)}% and $${DEFAULT_AOV}.
+</p>
   </div>
 
   <div class="grid">
