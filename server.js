@@ -236,9 +236,15 @@ app.get('/', (req,res)=>{
   res.send(html('', body));
 });
 
-// ---------- Create link (slug auto from Partner + Campaign) ----------
+// ---------- Create link (auto https + auto slug) ----------
 app.post('/admin/links', (req,res)=>{
   const { slug, target, partner, campaign, cr, aov } = req.body;
+
+  // Auto-add https:// if user omitted scheme
+  let targetUrl = (target || '').trim();
+  if (targetUrl && !/^https?:\/\//i.test(targetUrl)) {
+    targetUrl = 'https://' + targetUrl;
+  }
 
   // Build slug from Partner + Campaign if not provided
   let finalSlug = (slug && slug.trim()) || '';
@@ -252,7 +258,7 @@ app.post('/admin/links', (req,res)=>{
 
   try {
     db.prepare('INSERT INTO links (slug,target,partner,campaign,cr,aov) VALUES (?,?,?,?,?,?)')
-      .run(finalSlug, target.trim(), partner || null, campaign || null, parsedCR, parsedAOV);
+      .run(finalSlug, targetUrl, partner || null, campaign || null, parsedCR, parsedAOV);
     res.redirect('/');
   } catch (e) {
     res.status(400).send('Error creating link: ' + e.message);
