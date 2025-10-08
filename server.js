@@ -17,7 +17,7 @@ const DB_PATH = process.env.DB_PATH || './tracker.db';
 const SITE_NAME = process.env.SITE_NAME || 'Secret Boston';
 
 const DEFAULT_CR = Number(process.env.DEFAULT_CR || 0.008); // 0.8%
-const DEFAULT_AOV = Number(process.env.DEFAULT_AOV || 45);   // $45
+const DEFAULT_AOV = Number(process.env.DEFAULT_AOV || 45);  // $45
 
 // ---------- Init DB ----------
 const db = new Database(DB_PATH);
@@ -191,15 +191,15 @@ app.get('/', (req,res)=>{
       <h2>Create a short link</h2>
       <form method="POST" action="/admin/links">
         <label>Target URL (where to redirect)</label>
-        <input name="target" required placeholder="https://todaytix.com/secretboston" style="width:100%" />
+        <input name="target" required style="width:100%" />
         <div class="grid">
           <div>
             <label>Partner</label>
-            <input name="partner" placeholder="TodayTix" style="width:100%" />
+            <input name="partner" style="width:100%" />
           </div>
           <div>
             <label>Campaign</label>
-            <input name="campaign" placeholder="October" style="width:100%" />
+            <input name="campaign" style="width:100%" />
           </div>
         </div>
         <div class="grid">
@@ -214,7 +214,6 @@ app.get('/', (req,res)=>{
         </div>
         <p><button class="btn" type="submit">Create link</button></p>
       </form>
-      <p class="muted">Slug is auto-generated from Partner + Campaign (e.g., <code>todaytix-october</code>).</p>
     </div>
 
     <div class="card">
