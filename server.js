@@ -129,10 +129,10 @@ function parseConversionRate(input) {
   if (s === '' || s === '.' || s === '-.' || s === '+.') return DEFAULT_CR;
   let x = Number(s);
   if (!isFinite(x)) return DEFAULT_CR;
-  if (x > 1) return x / 100;
-  if (x > 0.2) return x / 100;   // 0.8 => 0.008 (0.8%)
+  if (x > 1) return x / 100;     // 8 -> 8% -> 0.08
+  if (x > 0.2) return x / 100;   // 0.8 -> 0.8% -> 0.008
   if (x <= 0) return DEFAULT_CR;
-  return x;
+  return x;                      // already a fraction like 0.008 or 0.01
 }
 
 function parseMoney(input) {
@@ -140,6 +140,29 @@ function parseMoney(input) {
   const s = String(input).replace(/[^0-9.]/g,''); // strip $ and commas
   const x = Number(s);
   return isFinite(x) && x > 0 ? x : DEFAULT_AOV;
+}
+
+// --- Slug helpers ---
+function slugify(s) {
+  if (!s) return '';
+  return String(s)
+    .toLowerCase()
+    .trim()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')   // non-alphanum -> hyphen
+    .replace(/^-+|-+$/g, '')       // trim hyphens
+    .replace(/-{2,}/g, '-');       // collapse repeats
+}
+
+function ensureUniqueSlug(base) {
+  let candidate = base || 'link';
+  let n = 1;
+  const exists = (slug) => !!db.prepare('SELECT 1 FROM links WHERE slug = ?').get(slug);
+  while (exists(candidate)) {
+    n += 1;
+    candidate = `${base}-${n}`;
+  }
+  return candidate;
 }
 
 // ---------- App ----------
@@ -167,8 +190,6 @@ app.get('/', (req,res)=>{
     <div class="card">
       <h2>Create a short link</h2>
       <form method="POST" action="/admin/links">
-        <label>Slug (e.g. <code>todaytix-nov</code>)</label>
-        <input name="slug" required placeholder="todaytix-nov" style="width:100%" />
         <label>Target URL (where to redirect)</label>
         <input name="target" required placeholder="https://todaytix.com/secretboston" style="width:100%" />
         <div class="grid">
@@ -178,7 +199,7 @@ app.get('/', (req,res)=>{
           </div>
           <div>
             <label>Campaign</label>
-            <input name="campaign" placeholder="Calendar Nov 12" style="width:100%" />
+            <input name="campaign" placeholder="October" style="width:100%" />
           </div>
         </div>
         <div class="grid">
@@ -193,6 +214,7 @@ app.get('/', (req,res)=>{
         </div>
         <p><button class="btn" type="submit">Create link</button></p>
       </form>
+      <p class="muted">Slug is auto-generated from Partner + Campaign (e.g., <code>todaytix-october</code>).</p>
     </div>
 
     <div class="card">
@@ -215,14 +237,23 @@ app.get('/', (req,res)=>{
   res.send(html('', body));
 });
 
-// ---------- Create link ----------
+// ---------- Create link (slug auto from Partner + Campaign) ----------
 app.post('/admin/links', (req,res)=>{
   const { slug, target, partner, campaign, cr, aov } = req.body;
+
+  // Build slug from Partner + Campaign if not provided
+  let finalSlug = (slug && slug.trim()) || '';
+  if (!finalSlug) {
+    const base = slugify(`${partner || 'link'}-${campaign || ''}`) || `link-${nanoid(6)}`;
+    finalSlug = ensureUniqueSlug(base);
+  }
+
   const parsedCR  = parseConversionRate(cr);
   const parsedAOV = parseMoney(aov);
+
   try {
     db.prepare('INSERT INTO links (slug,target,partner,campaign,cr,aov) VALUES (?,?,?,?,?,?)')
-      .run(slug.trim(), target.trim(), partner||null, campaign||null, parsedCR, parsedAOV);
+      .run(finalSlug, target.trim(), partner || null, campaign || null, parsedCR, parsedAOV);
     res.redirect('/');
   } catch (e) {
     res.status(400).send('Error creating link: ' + e.message);
