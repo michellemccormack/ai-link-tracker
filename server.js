@@ -121,7 +121,7 @@ function html(head, body) {
   </html>`;
 }
 
-// ---- Flexible parsers (accept %, words, $ signs, etc.) ----
+// ---- Flexible parsers (accept %, $, words, etc.) ----
 function parseConversionRate(input) {
   if (input == null || input === '') return DEFAULT_CR;
   let s = String(input).toLowerCase().replace(/percent/g,'').replace(/\s/g,'');
@@ -129,15 +129,10 @@ function parseConversionRate(input) {
   if (s === '' || s === '.' || s === '-.' || s === '+.') return DEFAULT_CR;
   let x = Number(s);
   if (!isFinite(x)) return DEFAULT_CR;
-
-  // Rules:
-  // - If x > 1, treat as percent (e.g., 8 => 8% => 0.08)
-  // - If 0.2 < x <= 1, treat as percent in whole numbers (e.g., 0.8 => 0.8% => 0.008)
-  // - If 0 < x <= 0.2, assume it's already a decimal fraction (e.g., 0.01 => 1%)
   if (x > 1) return x / 100;
   if (x > 0.2) return x / 100;   // 0.8 => 0.008 (0.8%)
   if (x <= 0) return DEFAULT_CR;
-  return x; // e.g., 0.01 or 0.008 entered intentionally
+  return x;
 }
 
 function parseMoney(input) {
@@ -153,7 +148,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-// Session cookie for events/time-on-site
+// Session cookie
 app.use((req,res,next)=>{
   if (!req.cookies.sb_session) {
     res.cookie('sb_session', nanoid(), { httpOnly: false, sameSite: 'Lax' });
@@ -167,7 +162,6 @@ app.get('/', (req,res)=>{
   const body = `
   <div class="card">
     <h1>${SITE_NAME} — Tracking & Estimation Agent <span class="tag">MVP</span></h1>
-    <h2>Short links, page analytics, and sales estimation (no partner access required)</h2>
   </div>
   <div class="grid">
     <div class="card">
@@ -197,9 +191,6 @@ app.get('/', (req,res)=>{
             <input name="aov" type="text" inputmode="decimal" placeholder="$45" style="width:100%" />
           </div>
         </div>
-        <p class="muted" style="margin-top:8px">
-          Examples: <code>1%</code>, <code>.8%</code>, <code>1</code>, <code>.8</code>, or <code>0.008</code>. AOV accepts <code>$45</code> or <code>45</code>.
-        </p>
         <p><button class="btn" type="submit">Create link</button></p>
       </form>
     </div>
@@ -220,24 +211,15 @@ app.get('/', (req,res)=>{
         </tbody>
       </table>
     </div>
-  </div>
-
-  <div class="card">
-    <h2>Diagnostics</h2>
-    <p class="muted">This page sends <em>pageview</em> on load and <em>time_on_site</em> on unload using <code>navigator.sendBeacon</code>.</p>
-    <pre class="pill">Session: ${req.cookies.sb_session || '(new)'}\nUser-Agent: ${(req.headers['user-agent']||'').slice(0,80)}...</pre>
-  </div>
-  `;
+  </div>`;
   res.send(html('', body));
 });
 
 // ---------- Create link ----------
 app.post('/admin/links', (req,res)=>{
   const { slug, target, partner, campaign, cr, aov } = req.body;
-
-  const parsedCR  = cr === undefined ? DEFAULT_CR : parseConversionRate(cr);
-  const parsedAOV = aov === undefined ? DEFAULT_AOV : parseMoney(aov);
-
+  const parsedCR  = parseConversionRate(cr);
+  const parsedAOV = parseMoney(aov);
   try {
     db.prepare('INSERT INTO links (slug,target,partner,campaign,cr,aov) VALUES (?,?,?,?,?,?)')
       .run(slug.trim(), target.trim(), partner||null, campaign||null, parsedCR, parsedAOV);
@@ -251,20 +233,17 @@ app.post('/admin/links', (req,res)=>{
 app.get('/r/:slug', (req,res)=>{
   const row = db.prepare('SELECT * FROM links WHERE slug = ?').get(req.params.slug);
   if (!row) return res.status(404).send('Not found');
-
   const clickId = nanoid();
   const { utm_source, utm_medium, utm_campaign } = req.query;
   db.prepare(`INSERT INTO clicks (slug, click_id, ip_hash, ua, referer, utm_source, utm_medium, utm_campaign, user_session)
               VALUES (?,?,?,?,?,?,?,?,?)`)
     .run(row.slug, clickId, ipHash(req), req.headers['user-agent']||'', req.headers.referer||'',
          utm_source||null, utm_medium||null, utm_campaign||null, req.cookies.sb_session||null);
-
   const url = new URL(row.target);
   url.searchParams.set('sb_click', clickId);
   if (utm_source) url.searchParams.set('utm_source', utm_source);
   if (utm_medium) url.searchParams.set('utm_medium', utm_medium);
   if (utm_campaign) url.searchParams.set('utm_campaign', utm_campaign);
-
   res.redirect(302, url.toString());
 });
 
@@ -312,9 +291,7 @@ app.get('/admin', requireAdmin, (req,res)=>{
   const latestEvents = db.prepare(`SELECT type, ts, duration_ms, substr(url,1,60) AS url FROM events ORDER BY id DESC LIMIT 25`).all();
 
   const body = `
-  <div class="card"><h1>Admin Dashboard</h1>
-    <p class="muted">Set <code>ADMIN_PASSWORD</code> in env vars for production.</p>
-  </div>
+  <div class="card"><h1>Admin Dashboard</h1></div>
   <div class="grid">
     <div class="card">
       <h2>Summary</h2>
@@ -342,84 +319,8 @@ app.get('/admin', requireAdmin, (req,res)=>{
         </tbody>
       </table>
     </div>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <h2>Latest Clicks</h2>
-      <table>
-        <thead><tr><th>Slug</th><th>Click ID</th><th>Time</th><th>UTM</th></tr></thead>
-        <tbody>
-          ${latestClicks.map(c=>`<tr>
-            <td>${c.slug}</td>
-            <td><code>${c.click_id}</code></td>
-            <td>${c.ts}</td>
-            <td class="muted">${[c.utm_source,c.utm_medium,c.utm_campaign].filter(Boolean).join(' / ')||'—'}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-    <div class="card">
-      <h2>Latest Events</h2>
-      <table>
-        <thead><tr><th>Type</th><th>Time</th><th>Duration</th><th>URL</th></tr></thead>
-        <tbody>
-          ${latestEvents.map(e=>`<tr>
-            <td>${e.type}</td>
-            <td>${e.ts}</td>
-            <td>${e.duration_ms? (e.duration_ms+' ms'):'—'}</td>
-            <td class="muted">${e.url||''}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Exports</h2>
-    <p><a class="btn" href="/admin/export/clicks.csv">Download clicks.csv</a>
-       <a class="btn" href="/admin/export/events.csv" style="margin-left:8px">Download events.csv</a>
-       <a class="btn" href="/admin/export/estimates.csv" style="margin-left:8px">Download estimates.csv</a></p>
   </div>`;
   res.send(html('', body));
-});
-
-// ---------- CSV exports ----------
-function toCSV(rows){
-  if (!rows.length) return '';
-  const headers = Object.keys(rows[0]);
-  const esc = v => (v==null?'':String(v).replace(/"/g,'""'));
-  const lines = [headers.join(',')].concat(rows.map(r=>headers.map(h=>`"${esc(r[h])}"`).join(',')));
-  return lines.join('\n');
-}
-
-app.get('/admin/export/clicks.csv', requireAdmin, (req,res)=>{
-  const rows = db.prepare('SELECT * FROM clicks ORDER BY id DESC').all();
-  res.setHeader('Content-Type','text/csv');
-  res.send(toCSV(rows));
-});
-
-app.get('/admin/export/events.csv', requireAdmin, (req,res)=>{
-  const rows = db.prepare('SELECT * FROM events ORDER BY id DESC').all();
-  res.setHeader('Content-Type','text/csv');
-  res.send(toCSV(rows));
-});
-
-app.get('/admin/export/estimates.csv', requireAdmin, (req,res)=>{
-  const rows = db.prepare(`
-    SELECT l.slug, l.partner, l.campaign,
-           COUNT(c.id) AS clicks,
-           COALESCE(l.cr, ?) AS conversion_rate,
-           COALESCE(l.aov, ?) AS average_order_value,
-           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) , 2) AS estimated_sales,
-           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS estimated_revenue
-    FROM links l
-    LEFT JOIN clicks c ON c.slug = l.slug
-    GROUP BY l.slug
-    ORDER BY clicks DESC
-  `).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV);
-  res.setHeader('Content-Type','text/csv');
-  res.send(toCSV(rows));
 });
 
 // ---------- Health ----------
