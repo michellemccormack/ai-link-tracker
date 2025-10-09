@@ -1,5 +1,5 @@
 /**
- * Secret Boston — Tracking & Estimation Agent (Stable + Contrast Fix)
+ * Link Tracker Pro — Tracking & Estimation Agent (Stable + Contrast Fix)
  */
 
 const express = require('express');
@@ -15,7 +15,7 @@ const path = require('path');
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme';
 const DB_PATH = process.env.DB_PATH || './tracker.db';
-const SITE_NAME = process.env.SITE_NAME || 'Secret Boston';
+const SITE_NAME = process.env.SITE_NAME || 'Link Tracker Pro';
 
 const DEFAULT_CR = Number(process.env.DEFAULT_CR || 0.008); // 0.8%
 const DEFAULT_AOV = Number(process.env.DEFAULT_AOV || 45);  // $45
@@ -166,7 +166,7 @@ app.get('/', (req, res) => {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${SITE_NAME} — Tracker</title>
+<title>${SITE_NAME}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
@@ -187,7 +187,7 @@ app.get('/', (req, res) => {
 </head>
 <body>
 <div class="wrap">
-  <h1>${SITE_NAME} — Tracking & Estimation Agent <span style="font-size:12px;color:var(--muted)">MVP</span></h1>
+  <h1>${SITE_NAME}</h1>
   <div class="grid">
     <div class="card">
       <h2>Create a short link</h2>
