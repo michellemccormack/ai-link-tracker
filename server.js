@@ -368,15 +368,16 @@ app.get('/admin', requireAdmin, (req,res)=>{
           </tr>`).join('')}
         </tbody>
       </table>
-    </div>
+  </div>
   </div>
 
-  <div class="card">
-    <h2>Exports</h2>
-    <div class="btn-row">
-      <a class="btn" href="/admin/export/clicks.csv">Download clicks.csv</a>
-      <a class="btn" href="/admin/export/events.csv">Download events.csv</a>
-      <a class="btn" href="/admin/export/estimates.csv">Download estimates.csv</a>
+  <div class="card" style="margin-top:24px;text-align:center">
+    <h2 style="margin-bottom:10px">📊 Download Spreadsheets</h2>
+    <p class="muted">Exports update live based on your tracked links.</p>
+    <div class="btn-row" style="display:flex;justify-content:center;gap:12px;margin-top:12px">
+      <a class="btn" href="/admin/export/clicks.csv" target="_blank">Clicks</a>
+      <a class="btn" href="/admin/export/events.csv" target="_blank">Events</a>
+      <a class="btn" href="/admin/export/estimates.csv" target="_blank">Estimates</a>
     </div>
   </div>`;
   res.send(html('', body));
