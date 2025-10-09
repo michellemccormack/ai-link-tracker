@@ -112,6 +112,7 @@ function html(head, body) {
       .pill{background:#151c2c;border:1px solid #283349;border-radius:999px;padding:6px 10px}
       code{background:#0e1422;border:1px solid #1f2937;padding:2px 6px;border-radius:6px}
       a { color:#38bdf8; text-decoration:none }
+      .btn-row a.btn{margin-right:8px; display:inline-block}
     </style>
     ${head||''}
   </head>
@@ -163,6 +164,15 @@ function ensureUniqueSlug(base) {
     candidate = `${base}-${n}`;
   }
   return candidate;
+}
+
+// ---------- CSV helper ----------
+function toCSV(rows){
+  if (!rows.length) return '';
+  const headers = Object.keys(rows[0]);
+  const esc = v => (v==null?'':String(v).replace(/"/g,'""'));
+  const lines = [headers.join(',')].concat(rows.map(r=>headers.map(h=>`"${esc(r[h])}"`).join(',')));
+  return lines.join('\n');
 }
 
 // ---------- App ----------
@@ -355,8 +365,47 @@ app.get('/admin', requireAdmin, (req,res)=>{
         </tbody>
       </table>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>Exports</h2>
+    <div class="btn-row">
+      <a class="btn" href="/admin/export/clicks.csv">Download clicks.csv</a>
+      <a class="btn" href="/admin/export/events.csv">Download events.csv</a>
+      <a class="btn" href="/admin/export/estimates.csv">Download estimates.csv</a>
+    </div>
   </div>`;
   res.send(html('', body));
+});
+
+// ---------- CSV export routes ----------
+app.get('/admin/export/clicks.csv', requireAdmin, (req,res)=>{
+  const rows = db.prepare('SELECT * FROM clicks ORDER BY id DESC').all();
+  res.setHeader('Content-Type','text/csv');
+  res.send(toCSV(rows));
+});
+
+app.get('/admin/export/events.csv', requireAdmin, (req,res)=>{
+  const rows = db.prepare('SELECT * FROM events ORDER BY id DESC').all();
+  res.setHeader('Content-Type','text/csv');
+  res.send(toCSV(rows));
+});
+
+app.get('/admin/export/estimates.csv', requireAdmin, (req,res)=>{
+  const rows = db.prepare(`
+    SELECT l.slug, l.partner, l.campaign,
+           COUNT(c.id) AS clicks,
+           COALESCE(l.cr, ?) AS conversion_rate,
+           COALESCE(l.aov, ?) AS average_order_value,
+           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) , 2) AS estimated_sales,
+           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS estimated_revenue
+    FROM links l
+    LEFT JOIN clicks c ON c.slug = l.slug
+    GROUP BY l.slug
+    ORDER BY clicks DESC
+  `).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV));
+  res.setHeader('Content-Type','text/csv');
+  res.send(toCSV(rows));
 });
 
 // ---------- Health ----------
