@@ -142,8 +142,24 @@ app.post('/admin/links', (req, res) => {
   let targetUrl = (target || '').trim();
   if (targetUrl && !/^https?:\/\//i.test(targetUrl)) targetUrl = 'https://' + targetUrl;
 
-  const baseSlug = slugify(`${partner || 'link'}-${campaign || ''}`) || `link-${nanoid()}`;
-  const finalSlug = baseSlug;
+  // Build slug with partner name prominently
+  let baseSlug;
+  if (partner && partner.trim()) {
+    const partnerSlug = slugify(partner);
+    const campaignSlug = campaign ? slugify(campaign) : '';
+    baseSlug = campaignSlug ? `${partnerSlug}-${campaignSlug}` : partnerSlug;
+  } else {
+    baseSlug = campaign ? slugify(campaign) : `link-${nanoid()}`;
+  }
+
+  // Check if slug exists, if so add a short suffix
+  let finalSlug = baseSlug;
+  let attempt = 0;
+  while (db.prepare('SELECT id FROM links WHERE slug = ?').get(finalSlug)) {
+    attempt++;
+    finalSlug = `${baseSlug}-${nanoid().slice(0, 4)}`;
+    if (attempt > 10) break; // safety
+  }
 
   const parsedCR = parseConversionRate(cr);
   const parsedAOV = parseMoney(aov);
@@ -166,7 +182,7 @@ app.get('/', (req, res) => {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${SITE_NAME}</title>
+<title>${SITE_NAME}: Tracking & Estimation Agent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
@@ -187,7 +203,7 @@ app.get('/', (req, res) => {
 </head>
 <body>
 <div class="wrap">
-  <h1>${SITE_NAME}</h1>
+  <h1>${SITE_NAME}: Tracking & Estimation Agent</h1>
   <div class="grid">
     <div class="card">
       <h2>Create a short link</h2>
@@ -197,21 +213,21 @@ app.get('/', (req, res) => {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div>
             <label>Partner</label>
-            <input name="partner">
+            <input name="partner" required>
           </div>
           <div>
             <label>Campaign</label>
-            <input name="campaign">
+            <input name="campaign" required>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div>
             <label>Conversion Rate</label>
-            <input name="cr" placeholder="1%">
+            <input name="cr" placeholder="1%" required>
           </div>
           <div>
             <label>Average Order Value</label>
-            <input name="aov" placeholder="$45">
+            <input name="aov" placeholder="$45" required>
           </div>
         </div>
         <button type="submit">Create link</button>
