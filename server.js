@@ -9,6 +9,8 @@ const cookieParser = require('cookie-parser');
 const basicAuth = require('basic-auth');
 const crypto = require('crypto');
 const { customAlphabet } = require('nanoid');
+const fs = require('fs');
+const path = require('path');
 
 // ---------- Config ----------
 const PORT = process.env.PORT || 3000;
@@ -19,11 +21,10 @@ const SITE_NAME = process.env.SITE_NAME || 'Secret Boston';
 const DEFAULT_CR = Number(process.env.DEFAULT_CR || 0.008); // 0.8%
 const DEFAULT_AOV = Number(process.env.DEFAULT_AOV || 45);  // $45
 
-// ---------- Init DB ----------
-const fs = require('fs');
-const path = require('path');
-// Ensure DB folder exists (works with Render Disks or any custom path)
+// Ensure DB folder exists (important on Render Disks)
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+
+// ---------- Init DB ----------
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 
@@ -130,19 +131,19 @@ function html(head, body) {
 function parseConversionRate(input) {
   if (input == null || input === '') return DEFAULT_CR;
   let s = String(input).toLowerCase().replace(/percent/g,'').replace(/\s/g,'');
-  s = s.replace(/[^0-9.+-]/g, ''); // remove % and other symbols, keep dot and sign
+  s = s.replace(/[^0-9.+-]/g, '');
   if (s === '' || s === '.' || s === '-.' || s === '+.') return DEFAULT_CR;
   let x = Number(s);
   if (!isFinite(x)) return DEFAULT_CR;
   if (x > 1) return x / 100;     // 8 -> 8% -> 0.08
   if (x > 0.2) return x / 100;   // 0.8 -> 0.8% -> 0.008
   if (x <= 0) return DEFAULT_CR;
-  return x;                      // already a fraction like 0.008 or 0.01
+  return x;                      // 0.008, 0.01, etc.
 }
 
 function parseMoney(input) {
   if (input == null || input === '') return DEFAULT_AOV;
-  const s = String(input).replace(/[^0-9.]/g,''); // strip $ and commas
+  const s = String(input).replace(/[^0-9.]/g,'');
   const x = Number(s);
   return isFinite(x) && x > 0 ? x : DEFAULT_AOV;
 }
@@ -154,9 +155,9 @@ function slugify(s) {
     .toLowerCase()
     .trim()
     .replace(/&/g, 'and')
-    .replace(/[^a-z0-9]+/g, '-')   // non-alphanum -> hyphen
-    .replace(/^-+|-+$/g, '')       // trim hyphens
-    .replace(/-{2,}/g, '-');       // collapse repeats
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
 }
 
 function ensureUniqueSlug(base) {
@@ -336,9 +337,6 @@ app.get('/admin', requireAdmin, (req,res)=>{
     GROUP BY l.slug
     ORDER BY clicks DESC
   `).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV);
-
-  const latestClicks = db.prepare(`SELECT slug, click_id, ts, utm_source, utm_medium, utm_campaign FROM clicks ORDER BY id DESC LIMIT 25`).all();
-  const latestEvents = db.prepare(`SELECT type, ts, duration_ms, substr(url,1,60) AS url FROM events ORDER BY id DESC LIMIT 25`).all();
 
   const body = `
   <div class="card"><h1>Admin Dashboard</h1></div>
