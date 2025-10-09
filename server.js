@@ -276,6 +276,11 @@ app.get('/r/:slug', (req, res) => {
   );
 
   const url = new URL(row.target);
+  // Add partner parameter first (capitalized)
+  if (row.partner) {
+    url.searchParams.set('partner', row.partner.toUpperCase());
+  }
+  // Then add click tracking parameter
   url.searchParams.set('sb_click', clickId);
   res.redirect(url.toString());
 });
