@@ -20,6 +20,10 @@ const DEFAULT_CR = Number(process.env.DEFAULT_CR || 0.008); // 0.8%
 const DEFAULT_AOV = Number(process.env.DEFAULT_AOV || 45);  // $45
 
 // ---------- Init DB ----------
+const fs = require('fs');
+const path = require('path');
+// Ensure DB folder exists (works with Render Disks or any custom path)
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 
