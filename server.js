@@ -189,7 +189,10 @@ app.get('/', (req, res) => {
   :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; }
   *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg)}
   .wrap{max-width:1150px;margin:28px auto;padding:0 18px}
-  h1{font-size:36px;margin:0 0 16px}
+  .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+  h1{font-size:36px;margin:0}
+  .admin-btn{background:#fff;color:#0b0f17;text-decoration:none;padding:10px 20px;border-radius:10px;font-weight:600;font-size:14px;display:inline-block}
+  .admin-btn:hover{background:#e5e7eb}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
   .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:20px}
   label{display:block;margin:10px 0 6px}
@@ -203,7 +206,10 @@ app.get('/', (req, res) => {
 </head>
 <body>
 <div class="wrap">
-  <h1>${SITE_NAME}: Tracking & Estimation Agent</h1>
+  <div class="header">
+    <h1>${SITE_NAME}: Tracking & Estimation Agent</h1>
+    <a href="/admin" class="admin-btn">ADMIN DASHBOARD</a>
+  </div>
   <div class="grid">
     <div class="card">
       <h2>Create a short link</h2>
@@ -311,7 +317,7 @@ app.get('/admin', requireAdmin, (req, res) => {
 <html>
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Admin — ${SITE_NAME}</title>
+<title>${SITE_NAME}: Admin Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
   :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; }
@@ -329,7 +335,7 @@ app.get('/admin', requireAdmin, (req, res) => {
 </head>
 <body>
 <div class="wrap">
-  <h1>Admin Dashboard</h1>
+  <h1>${SITE_NAME}: Admin Dashboard</h1>
   <div class="grid">
     <div class="card">
       <h2>Summary</h2>
