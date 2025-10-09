@@ -1,6 +1,5 @@
 /**
- * Secret Boston — Simple Tracking & Estimation Agent
- * Node.js (Express) + SQLite (better-sqlite3)
+ * Secret Boston — Tracking & Estimation Agent (Stable Build)
  */
 
 const express = require('express');
@@ -18,10 +17,10 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme';
 const DB_PATH = process.env.DB_PATH || './tracker.db';
 const SITE_NAME = process.env.SITE_NAME || 'Secret Boston';
 
-const DEFAULT_CR = Number(process.env.DEFAULT_CR || 0.008); // 0.8%
-const DEFAULT_AOV = Number(process.env.DEFAULT_AOV || 45);  // $45
+const DEFAULT_CR = Number(process.env.DEFAULT_CR || 0.008);
+const DEFAULT_AOV = Number(process.env.DEFAULT_AOV || 45);
 
-// Ensure DB folder exists (important on Render Disks)
+// ---------- Ensure DB folder ----------
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 // ---------- Init DB ----------
@@ -73,7 +72,7 @@ db.prepare(`CREATE TABLE IF NOT EXISTS pageviews (
 )`).run();
 
 // ---------- Helpers ----------
-const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 12);
+const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 10);
 
 function requireAdmin(req, res, next) {
   const user = basicAuth(req);
@@ -85,99 +84,43 @@ function requireAdmin(req, res, next) {
 }
 
 function ipHash(req) {
-  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0];
   const ua = req.headers['user-agent'] || '';
-  const salt = new Date().toISOString().slice(0,10); // rotate daily
-  return crypto.createHash('sha256').update(ip + ua + salt).digest('hex').slice(0,32);
+  const salt = new Date().toISOString().slice(0, 10);
+  return crypto.createHash('sha256').update(ip + ua + salt).digest('hex').slice(0, 32);
 }
 
-function html(head, body) {
-  return `<!doctype html>
-  <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${SITE_NAME} Tracker</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-    <style>
-      :root { --bg:#0b0f17; --fg:#e6edf3; --muted:#98a2b3; --card:#111827; --accent:#4f46e5; }
-      *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont;background:var(--bg);color:var(--fg)}
-      .container{max-width:980px;margin:40px auto;padding:0 20px}
-      .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:20px;margin-bottom:18px}
-      h1{font-size:28px;margin:0 0 10px} h2{font-size:18px;margin:0 0 10px;color:var(--muted)}
-      input,select,button,textarea{background:#0b1220;color:var(--fg);border:1px solid #263041;border-radius:10px;padding:10px}
-      label{display:block;margin:8px 0 4px;color:#cbd5e1}
-      table{width:100%;border-collapse:collapse}
-      th,td{border-bottom:1px solid #1f2937;padding:10px;text-align:left}
-      .btn{background:var(--accent);border:none;padding:10px 14px;border-radius:10px;font-weight:600;cursor:pointer}
-      .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
-      .muted{color:var(--muted)}
-      .tag{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #2b3444;color:#9aa4b2;font-size:12px;margin-left:8px}
-      .pill{background:#151c2c;border:1px solid #283349;border-radius:999px;padding:6px 10px}
-      code{background:#0e1422;border:1px solid #1f2937;padding:2px 6px;border-radius:6px}
-      a { color:#38bdf8; text-decoration:none }
-      .btn-row a.btn{margin-right:8px; display:inline-block}
-    </style>
-    ${head||''}
-  </head>
-  <body>
-    <div class="container">${body}</div>
-  </body>
-  </html>`;
-}
-
-// ---- Flexible parsers (accept %, $, words, etc.) ----
 function parseConversionRate(input) {
-  if (input == null || input === '') return DEFAULT_CR;
-  let s = String(input).toLowerCase().replace(/percent/g,'').replace(/\s/g,'');
-  s = s.replace(/[^0-9.+-]/g, '');
-  if (s === '' || s === '.' || s === '-.' || s === '+.') return DEFAULT_CR;
-  let x = Number(s);
-  if (!isFinite(x)) return DEFAULT_CR;
-  if (x > 1) return x / 100;     // 8 -> 8% -> 0.08
-  if (x > 0.2) return x / 100;   // 0.8 -> 0.8% -> 0.008
-  if (x <= 0) return DEFAULT_CR;
-  return x;                      // 0.008, 0.01, etc.
+  if (!input) return DEFAULT_CR;
+  const cleaned = input.toString().replace(/[^0-9.]/g, '');
+  const num = parseFloat(cleaned);
+  if (!num || isNaN(num)) return DEFAULT_CR;
+  if (num > 1) return num / 100;
+  if (num > 0.2) return num / 100;
+  return num;
 }
 
 function parseMoney(input) {
-  if (input == null || input === '') return DEFAULT_AOV;
-  const s = String(input).replace(/[^0-9.]/g,'');
-  const x = Number(s);
-  return isFinite(x) && x > 0 ? x : DEFAULT_AOV;
+  if (!input) return DEFAULT_AOV;
+  const cleaned = input.toString().replace(/[^0-9.]/g, '');
+  const num = parseFloat(cleaned);
+  return num > 0 ? num : DEFAULT_AOV;
 }
 
-// --- Slug helpers ---
-function slugify(s) {
-  if (!s) return '';
-  return String(s)
+function slugify(text) {
+  return text
     .toLowerCase()
-    .trim()
-    .replace(/&/g, 'and')
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .replace(/-{2,}/g, '-');
+    .replace(/^-+|-+$/g, '');
 }
 
-function ensureUniqueSlug(base) {
-  let candidate = base || 'link';
-  let n = 1;
-  const exists = (slug) => !!db.prepare('SELECT 1 FROM links WHERE slug = ?').get(slug);
-  while (exists(candidate)) {
-    n += 1;
-    candidate = `${base}-${n}`;
-  }
-  return candidate;
-}
-
-// ---------- CSV helper ----------
-function toCSV(rows){
+function toCSV(rows) {
   if (!rows.length) return '';
   const headers = Object.keys(rows[0]);
-  const esc = v => (v==null?'':String(v).replace(/"/g,'""'));
-  const lines = [headers.join(',')].concat(rows.map(r=>headers.map(h=>`"${esc(r[h])}"`).join(',')));
-  return lines.join('\n');
+  const escape = (val) => `"${(val ?? '').toString().replace(/"/g, '""')}"`;
+  return [headers.join(',')]
+    .concat(rows.map((r) => headers.map((h) => escape(r[h])).join(',')))
+    .join('\n');
 }
 
 // ---------- App ----------
@@ -186,236 +129,208 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-// Session cookie
-app.use((req,res,next)=>{
-  if (!req.cookies.sb_session) {
-    res.cookie('sb_session', nanoid(), { httpOnly: false, sameSite: 'Lax' });
-  }
+app.use((req, res, next) => {
+  if (!req.cookies.sb_session) res.cookie('sb_session', nanoid(), { httpOnly: false });
   next();
 });
 
-// ---------- Landing page ----------
-app.get('/', (req,res)=>{
-  const links = db.prepare('SELECT slug,target,partner,campaign,cr,aov FROM links ORDER BY id DESC LIMIT 20').all();
-  const body = `
-  <div class="card">
-    <h1>${SITE_NAME} — Tracking & Estimation Agent <span class="tag">MVP</span></h1>
-  </div>
-  <div class="grid">
-    <div class="card">
-      <h2>Create a short link</h2>
-      <form method="POST" action="/admin/links">
-        <label>Target URL (where to redirect)</label>
-        <input name="target" required style="width:100%" />
-        <div class="grid">
-          <div>
-            <label>Partner</label>
-            <input name="partner" style="width:100%" />
-          </div>
-          <div>
-            <label>Campaign</label>
-            <input name="campaign" style="width:100%" />
-          </div>
-        </div>
-        <div class="grid">
-          <div>
-            <label>Enter Assumed Conversion Rate</label>
-            <input name="cr" type="text" inputmode="decimal" placeholder="1%" style="width:100%" />
-          </div>
-          <div>
-            <label>Assumed Average Order Value</label>
-            <input name="aov" type="text" inputmode="decimal" placeholder="$45" style="width:100%" />
-          </div>
-        </div>
-        <p><button class="btn" type="submit">Create link</button></p>
-      </form>
-    </div>
+// ---------- Create link ----------
+app.post('/admin/links', (req, res) => {
+  const { target, partner, campaign, cr, aov } = req.body;
 
-    <div class="card">
-      <h2>Recent links</h2>
-      <table>
-        <thead><tr><th>Slug</th><th>Target</th><th>Partner</th><th>Campaign</th><th>Conversion Rate</th><th>Average Order Value</th></tr></thead>
-        <tbody>
-          ${links.map(l=>`<tr>
-            <td><a href="/r/${l.slug}" target="_blank">/r/${l.slug}</a></td>
-            <td class="muted" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.target}</td>
-            <td>${l.partner||''}</td>
-            <td>${l.campaign||''}</td>
-            <td>${(((l.cr??DEFAULT_CR) * 100).toFixed(2))}%</td>
-            <td>$${(l.aov??DEFAULT_AOV)}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-  </div>`;
-  res.send(html('', body));
-});
+  let targetUrl = target.trim();
+  if (targetUrl && !/^https?:\/\//i.test(targetUrl)) targetUrl = 'https://' + targetUrl;
 
-// ---------- Create link (auto https + auto slug) ----------
-app.post('/admin/links', (req,res)=>{
-  const { slug, target, partner, campaign, cr, aov } = req.body;
+  const baseSlug = slugify(`${partner || 'link'}-${campaign || ''}`);
+  const slug = baseSlug || `link-${nanoid()}`;
+  const finalSlug = slug;
 
-  // Auto-add https:// if user omitted scheme
-  let targetUrl = (target || '').trim();
-  if (targetUrl && !/^https?:\/\//i.test(targetUrl)) {
-    targetUrl = 'https://' + targetUrl;
-  }
-
-  // Build slug from Partner + Campaign if not provided
-  let finalSlug = (slug && slug.trim()) || '';
-  if (!finalSlug) {
-    const base = slugify(`${partner || 'link'}-${campaign || ''}`) || `link-${nanoid(6)}`;
-    finalSlug = ensureUniqueSlug(base);
-  }
-
-  const parsedCR  = parseConversionRate(cr);
+  const parsedCR = parseConversionRate(cr);
   const parsedAOV = parseMoney(aov);
 
   try {
-    db.prepare('INSERT INTO links (slug,target,partner,campaign,cr,aov) VALUES (?,?,?,?,?,?)')
-      .run(finalSlug, targetUrl, partner || null, campaign || null, parsedCR, parsedAOV);
+    db.prepare('INSERT INTO links (slug, target, partner, campaign, cr, aov) VALUES (?,?,?,?,?,?)')
+      .run(finalSlug, targetUrl, partner, campaign, parsedCR, parsedAOV);
     res.redirect('/');
   } catch (e) {
-    res.status(400).send('Error creating link: ' + e.message);
+    res.status(400).send('Error: ' + e.message);
   }
 });
 
-// ---------- Redirect + click logging ----------
-app.get('/r/:slug', (req,res)=>{
-  const row = db.prepare('SELECT * FROM links WHERE slug = ?').get(req.params.slug);
-  if (!row) return res.status(404).send('Not found');
-  const clickId = nanoid();
-  const { utm_source, utm_medium, utm_campaign } = req.query;
-  db.prepare(`INSERT INTO clicks (slug, click_id, ip_hash, ua, referer, utm_source, utm_medium, utm_campaign, user_session)
-              VALUES (?,?,?,?,?,?,?,?,?)`)
-    .run(row.slug, clickId, ipHash(req), req.headers['user-agent']||'', req.headers.referer||'',
-         utm_source||null, utm_medium||null, utm_campaign||null, req.cookies.sb_session||null);
-  const url = new URL(row.target);
-  url.searchParams.set('sb_click', clickId);
-  if (utm_source) url.searchParams.set('utm_source', utm_source);
-  if (utm_medium) url.searchParams.set('utm_medium', utm_medium);
-  if (utm_campaign) url.searchParams.set('utm_campaign', utm_campaign);
-  res.redirect(302, url.toString());
-});
-
-// ---------- Event ingest ----------
-app.post('/api/event', (req,res)=>{
-  try {
-    const { type, user_session, url, referer, duration_ms, data } = req.body || {};
-    if (!type) return res.status(400).json({ ok:false, error:'missing type' });
-    const dataStr = data ? JSON.stringify(data).slice(0,2000) : null;
-    db.prepare('INSERT INTO events (type,user_session,url,referer,duration_ms,data) VALUES (?,?,?,?,?,?)')
-      .run(type, user_session||null, url||null, referer||null, duration_ms||null, dataStr);
-    if (type==='pageview') {
-      db.prepare('INSERT INTO pageviews (user_session,url,referer) VALUES (?,?,?)')
-        .run(user_session||null, url||null, referer||null);
-    }
-    res.json({ ok:true });
-  } catch (e) {
-    res.status(500).json({ ok:false, error: e.message });
-  }
-});
-
-// ---------- Admin dashboard ----------
-app.get('/admin', requireAdmin, (req,res)=>{
-  const totals = db.prepare(`
-    SELECT
-      (SELECT COUNT(*) FROM clicks) AS clicks,
-      (SELECT COUNT(*) FROM pageviews) AS views,
-      (SELECT ROUND(AVG(duration_ms),0) FROM events WHERE type='time_on_site') AS avg_ms
-  `).get();
-
-  const bySlug = db.prepare(`
-    SELECT l.slug, l.partner, l.campaign,
-           COUNT(c.id) AS clicks,
-           COALESCE(l.cr, ?) AS conversion_rate,
-           COALESCE(l.aov, ?) AS average_order_value,
-           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) , 2) AS estimated_sales,
-           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS estimated_revenue
-    FROM links l
-    LEFT JOIN clicks c ON c.slug = l.slug
-    GROUP BY l.slug
-    ORDER BY clicks DESC
-  `).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV);
+// ---------- Home ----------
+app.get('/', (req, res) => {
+  const links = db.prepare('SELECT * FROM links ORDER BY id DESC LIMIT 20').all();
 
   const body = `
-  <div class="card"><h1>Admin Dashboard</h1></div>
-  <div class="grid">
-    <div class="card">
-      <h2>Summary</h2>
-      <table>
-        <tr><td>Total Views</td><td>${totals.views||0}</td></tr>
-        <tr><td>Total Clicks</td><td>${totals.clicks||0}</td></tr>
-        <tr><td>Avg Time on Site</td><td>${totals.avg_ms? (Math.round(totals.avg_ms/100)/10)+'s':'—'}</td></tr>
-      </table>
-    </div>
-    <div class="card">
-      <h2>Per Link — Estimated Sales & Revenue</h2>
-      <table>
-        <thead><tr><th>Slug</th><th>Partner</th><th>Campaign</th><th>Clicks</th><th>Conversion Rate</th><th>Average Order Value</th><th>Estimated Sales</th><th>Estimated Revenue</th></tr></thead>
-        <tbody>
-          ${bySlug.map(r=>`<tr>
-            <td><code>${r.slug}</code></td>
-            <td>${r.partner||''}</td>
-            <td>${r.campaign||''}</td>
-            <td>${r.clicks}</td>
-            <td>${(Number(r.conversion_rate) * 100).toFixed(2)}%</td>
-            <td>$${Number(r.average_order_value).toFixed(2)}</td>
-            <td>${r.estimated_sales}</td>
-            <td>$${r.estimated_revenue}</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-  </div>
-  </div>
+  <div style="font-family:Inter,sans-serif;color:#fff;background:#0b0f17;padding:20px">
+    <h1>Secret Boston — Tracking & Estimation Agent <span style="font-size:12px;color:#777">MVP</span></h1>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px">
+      <form action="/admin/links" method="POST" style="background:#111827;padding:20px;border-radius:10px">
+        <h2>Create a short link</h2>
+        <label>Target URL</label><br>
+        <input name="target" required style="width:100%;margin-bottom:10px"><br>
+        <div style="display:flex;gap:10px">
+          <div><label>Partner</label><br><input name="partner" style="width:100%"></div>
+          <div><label>Campaign</label><br><input name="campaign" style="width:100%"></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:10px">
+          <div><label>Conversion Rate</label><br><input name="cr" placeholder="1%" style="width:100%"></div>
+          <div><label>Average Order Value</label><br><input name="aov" placeholder="$45" style="width:100%"></div>
+        </div>
+        <button type="submit" style="margin-top:15px;background:#4f46e5;color:white;border:none;padding:8px 14px;border-radius:8px;cursor:pointer">Create link</button>
+      </form>
 
-  <div class="card" style="margin-top:24px;text-align:center">
-    <h2 style="margin-bottom:10px">📊 Download Spreadsheets</h2>
-    <p class="muted">Exports update live based on your tracked links.</p>
-    <div class="btn-row" style="display:flex;justify-content:center;gap:12px;margin-top:12px">
-      <a class="btn" href="/admin/export/clicks.csv" target="_blank">Clicks</a>
-      <a class="btn" href="/admin/export/events.csv" target="_blank">Events</a>
-      <a class="btn" href="/admin/export/estimates.csv" target="_blank">Estimates</a>
+      <div style="background:#111827;padding:20px;border-radius:10px">
+        <h2>Recent links</h2>
+        <table style="width:100%;border-collapse:collapse">
+          <tr><th>Slug</th><th>Target</th><th>Partner</th><th>Campaign</th><th>CR</th><th>AOV</th></tr>
+          ${links
+            .map(
+              (l) => `
+            <tr>
+              <td><a href="/r/${l.slug}" target="_blank" style="color:#38bdf8">/r/${l.slug}</a></td>
+              <td>${l.target}</td>
+              <td>${l.partner || ''}</td>
+              <td>${l.campaign || ''}</td>
+              <td>${((l.cr ?? DEFAULT_CR) * 100).toFixed(2)}%</td>
+              <td>$${l.aov ?? DEFAULT_AOV}</td>
+            </tr>`
+            )
+            .join('')}
+        </table>
+      </div>
     </div>
   </div>`;
-  res.send(html('', body));
+  res.send(body);
 });
 
-// ---------- CSV export routes ----------
-app.get('/admin/export/clicks.csv', requireAdmin, (req,res)=>{
+// ---------- Redirect ----------
+app.get('/r/:slug', (req, res) => {
+  const row = db.prepare('SELECT * FROM links WHERE slug = ?').get(req.params.slug);
+  if (!row) return res.status(404).send('Not found');
+
+  const clickId = nanoid();
+  db.prepare(
+    `INSERT INTO clicks (slug, click_id, ip_hash, ua, referer, user_session)
+     VALUES (?,?,?,?,?,?)`
+  ).run(
+    row.slug,
+    clickId,
+    ipHash(req),
+    req.headers['user-agent'] || '',
+    req.headers.referer || '',
+    req.cookies.sb_session || ''
+  );
+
+  const url = new URL(row.target);
+  url.searchParams.set('sb_click', clickId);
+  res.redirect(url.toString());
+});
+
+// ---------- Admin ----------
+app.get('/admin', requireAdmin, (req, res) => {
+  const totals = db
+    .prepare(
+      `SELECT
+       (SELECT COUNT(*) FROM clicks) AS clicks,
+       (SELECT COUNT(*) FROM pageviews) AS views,
+       (SELECT ROUND(AVG(duration_ms),0) FROM events WHERE type='time_on_site') AS avg_ms`
+    )
+    .get();
+
+  const bySlug = db
+    .prepare(
+      `SELECT l.slug, l.partner, l.campaign,
+              COUNT(c.id) AS clicks,
+              COALESCE(l.cr, ?) AS cr,
+              COALESCE(l.aov, ?) AS aov,
+              ROUND(COUNT(c.id) * COALESCE(l.cr, ?), 2) AS est_sales,
+              ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS est_rev
+       FROM links l
+       LEFT JOIN clicks c ON c.slug = l.slug
+       GROUP BY l.slug
+       ORDER BY clicks DESC`
+    )
+    .all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV);
+
+  const html = `
+  <div style="font-family:Inter,sans-serif;color:#fff;background:#0b0f17;padding:20px">
+    <h1>Admin Dashboard</h1>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:20px">
+      <div style="background:#111827;padding:20px;border-radius:10px">
+        <h2>Summary</h2>
+        <p>Total Views: ${totals.views || 0}</p>
+        <p>Total Clicks: ${totals.clicks || 0}</p>
+        <p>Avg Time: ${totals.avg_ms ? totals.avg_ms / 1000 + 's' : '—'}</p>
+      </div>
+      <div style="background:#111827;padding:20px;border-radius:10px">
+        <h2>Per Link — Estimated Sales & Revenue</h2>
+        <table style="width:100%;border-collapse:collapse">
+          <tr><th>Slug</th><th>Partner</th><th>Campaign</th><th>Clicks</th><th>CR</th><th>AOV</th><th>Sales</th><th>Revenue</th></tr>
+          ${bySlug
+            .map(
+              (r) => `
+              <tr>
+                <td><code>${r.slug}</code></td>
+                <td>${r.partner || ''}</td>
+                <td>${r.campaign || ''}</td>
+                <td>${r.clicks}</td>
+                <td>${(r.cr * 100).toFixed(2)}%</td>
+                <td>$${r.aov.toFixed(2)}</td>
+                <td>${r.est_sales}</td>
+                <td>$${r.est_rev}</td>
+              </tr>`
+            )
+            .join('')}
+        </table>
+      </div>
+    </div>
+    <div style="background:#111827;margin-top:30px;padding:20px;border-radius:10px;text-align:center">
+      <h2>📊 Download Spreadsheets</h2>
+      <a href="/admin/export/clicks.csv" style="background:#4f46e5;color:white;padding:8px 12px;border-radius:8px;margin-right:8px">Clicks</a>
+      <a href="/admin/export/events.csv" style="background:#4f46e5;color:white;padding:8px 12px;border-radius:8px;margin-right:8px">Events</a>
+      <a href="/admin/export/estimates.csv" style="background:#4f46e5;color:white;padding:8px 12px;border-radius:8px">Estimates</a>
+    </div>
+  </div>`;
+  res.send(html);
+});
+
+// ---------- CSV Exports ----------
+app.get('/admin/export/clicks.csv', requireAdmin, (req, res) => {
   const rows = db.prepare('SELECT * FROM clicks ORDER BY id DESC').all();
-  res.setHeader('Content-Type','text/csv');
+  res.setHeader('Content-Type', 'text/csv');
   res.send(toCSV(rows));
 });
 
-app.get('/admin/export/events.csv', requireAdmin, (req,res)=>{
+app.get('/admin/export/events.csv', requireAdmin, (req, res) => {
   const rows = db.prepare('SELECT * FROM events ORDER BY id DESC').all();
-  res.setHeader('Content-Type','text/csv');
+  res.setHeader('Content-Type', 'text/csv');
   res.send(toCSV(rows));
 });
 
-app.get('/admin/export/estimates.csv', requireAdmin, (req,res)=>{
-  const rows = db.prepare(`
-    SELECT l.slug, l.partner, l.campaign,
-           COUNT(c.id) AS clicks,
-           COALESCE(l.cr, ?) AS conversion_rate,
-           COALESCE(l.aov, ?) AS average_order_value,
-           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) , 2) AS estimated_sales,
-           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS estimated_revenue
-    FROM links l
-    LEFT JOIN clicks c ON c.slug = l.slug
-    GROUP BY l.slug
-    ORDER BY clicks DESC
-  `).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV));
-  res.setHeader('Content-Type','text/csv');
+app.get('/admin/export/estimates.csv', requireAdmin, (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT l.slug, l.partner, l.campaign,
+              COUNT(c.id) AS clicks,
+              COALESCE(l.cr, ?) AS cr,
+              COALESCE(l.aov, ?) AS aov,
+              ROUND(COUNT(c.id) * COALESCE(l.cr, ?), 2) AS est_sales,
+              ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS est_rev
+       FROM links l
+       LEFT JOIN clicks c ON c.slug = l.slug
+       GROUP BY l.slug
+       ORDER BY clicks DESC`
+    )
+    .all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV);
+  res.setHeader('Content-Type', 'text/csv');
   res.send(toCSV(rows));
 });
 
 // ---------- Health ----------
-app.get('/health', (req,res)=>res.json({ ok:true }));
+app.get('/health', (req, res) => res.json({ ok: true }));
 
 // ---------- Start ----------
-app.listen(PORT, ()=>{
-  console.log(`\n${SITE_NAME} Tracker running on http://localhost:${PORT}`);
-  console.log(`Admin: http://localhost:${PORT}/admin  (password: ${ADMIN_PASSWORD})`);
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
 });
