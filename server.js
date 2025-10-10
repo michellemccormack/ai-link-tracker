@@ -256,7 +256,25 @@ app.get('/register', (req, res) => {
   .link{text-align:center;margin-top:16px}
   a{color:var(--link);text-decoration:none} a:hover{text-decoration:underline}
   .error{background:#7f1d1d;border:1px solid #991b1b;color:#fecaca;padding:12px;border-radius:8px;margin-bottom:16px}
-</style>
+/* fix Create-a-short-link layout */
+.form .row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+  align-items:start;
+}
+.form .field{
+  display:flex;
+  flex-direction:column;
+}
+.form .field label{
+  margin:10px 0 6px;
+}
+.form .field input{
+  width:100%;
+  box-sizing:border-box;
+}
+  </style>
 </head>
 <body>
 <div class="card">
@@ -483,31 +501,34 @@ app.get('/', requireAuth, (req, res) => {
   <div class="grid">
     <div class="card">
       <h2>Create a short link</h2>
-      <form action="/admin/links" method="POST">
-        <label>Target URL</label>
-        <input name="target" required>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div>
-            <label>Partner</label>
-            <input name="partner" required>
-          </div>
-          <div>
-            <label>Campaign</label>
-            <input name="campaign" required>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div>
-            <label>Conversion Rate</label>
-            <input name="cr" placeholder="1%" required>
-          </div>
-          <div>
-            <label>Average Order Value</label>
-            <input name="aov" placeholder="$45" required>
-          </div>
-        </div>
-        <button type="submit">Create link</button>
-      </form>
+   <form action="/admin/links" method="POST" class="form">
+  <label>Target URL</label>
+  <input name="target" required>
+
+  <div class="row">
+    <div class="field">
+      <label>Partner</label>
+      <input name="partner" required>
+    </div>
+    <div class="field">
+      <label>Campaign</label>
+      <input name="campaign" required>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label>Conversion Rate</label>
+      <input name="cr" placeholder="1%" required>
+    </div>
+    <div class="field">
+      <label>Average Order Value</label>
+      <input name="aov" placeholder="$45" required>
+    </div>
+  </div>
+
+  <button type="submit">Create link</button>
+</form>
     </div>
 
     <div class="card">
