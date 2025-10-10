@@ -673,8 +673,7 @@ app.get('/admin', requireAuth, (req, res) => {
     ORDER BY clicks DESC
   `).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV, req.user.id, req.user.id);
 
-  // NEW: total estimated revenue across all links
-  const estTotal = bySlug.reduce((sum, r) => sum + (Number(r.est_rev) || 0), 0);
+  const estTotal = bySlug.reduce((sum, r) => sum + Number(r.est_rev || 0), 0);
 
   res.send(`<!doctype html>
 <html>
@@ -684,12 +683,9 @@ app.get('/admin', requireAuth, (req, res) => {
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
   :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; }
-
-  /* Base layout */
-  *{box-sizing:border-box}
-  body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg)}
+  *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg)}
   .wrap{max-width:1200px;margin:28px auto;padding:0 18px}
-  .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+  .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px}
   h1{font-size:36px;margin:0}
   .home-btn{background:#fff;color:#0b0f17;text-decoration:none;padding:10px 20px;border-radius:10px;font-weight:600;font-size:14px;display:inline-block}
   .home-btn:hover{background:#e5e7eb}
@@ -700,27 +696,19 @@ app.get('/admin', requireAuth, (req, res) => {
   td{color:var(--fg);border-bottom:1px solid #1f2937;padding:10px 8px}
   a{color:var(--link);text-decoration:none} a:hover{text-decoration:underline}
   .btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:600}
-
-  /* Helpers for responsive tables */
-  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .hide-sm { display: table-cell; }
+  .pill{display:inline-block;background:#1f2937;color:#93c5fd;padding:2px 8px;border-radius:8px}
+  .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
 
   /* === Mobile tweaks (≤ 720px) === */
-  @media (max-width: 720px) {
+  @media (max-width:720px){
     .wrap { padding: 0 12px; }
-    h1 { font-size: 24px; line-height: 1.2; }
-    .header { flex-direction: column; gap: 10px; align-items: flex-start; }
-    .home-btn { width: 100%; text-align: center; }
-
-    .grid { grid-template-columns: 1fr; gap: 16px; }
-    .card { padding: 16px; }
-
-    /* Make the table scroll horizontally on phones */
-    table { min-width: 720px; }
-    th, td { padding: 10px 12px; font-size: 14px; white-space: nowrap; }
-
-    /* Hide lower-priority columns on small screens */
-    .hide-sm { display: none; }
+    h1 { font-size:24px; line-height:1.2; }
+    .header { flex-direction:column; align-items:flex-start; }
+    .home-btn { width:100%; text-align:center; }
+    .grid { grid-template-columns:1fr; gap:16px; }
+    .card { padding:16px; }
+    .table-wrap table { min-width: 720px; } /* scrolls horizontally on phones */
+    th, td { padding:10px 12px; font-size:14px; white-space:nowrap; }
   }
 </style>
 </head>
@@ -730,47 +718,49 @@ app.get('/admin', requireAuth, (req, res) => {
     <h1>${SITE_NAME}: Admin Dashboard</h1>
     <a href="/" class="home-btn">LINK TRACKER PRO</a>
   </div>
+
   <div class="grid">
     <div class="card">
       <h2>Summary</h2>
-      <p>Total Views: ${totals.views || 0}</p>
-      <p>Total Clicks: ${totals.clicks || 0}</p>
-      <p>Avg Time: ${totals.avg_ms ? (totals.avg_ms/1000)+'s' : '—'}</p>
-      <p><strong>Est Revenue: $${estTotal.toFixed(2)}</strong></p>
+      <p>Total Views: <strong>${totals.views || 0}</strong></p>
+      <p>Total Clicks: <strong>${totals.clicks || 0}</strong></p>
+      <p>Avg Time: <strong>${totals.avg_ms ? (totals.avg_ms/1000)+'s' : '—'}</strong></p>
+      <p>Estimated Earnings: <strong>$${estTotal.toFixed(2)}</strong></p>
     </div>
+
     <div class="card">
-   <h2>Per Link — Estimated Sales & Revenue</h2>
-<div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th>Slug</th>
-        <th class="hide-sm">Partner</th>
-        <th class="hide-sm">Campaign</th>
-        <th>Clicks</th>
-        <th class="hide-sm">CR</th>
-        <th class="hide-sm">AOV</th>
-        <th>Sales</th>
-        <th>Revenue</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${bySlug.map(r => `
-        <tr>
-          <td><code style="background:#1f2937;color:#93c5fd;padding:2px 6px;border-radius:6px">${r.slug}</code></td>
-          <td class="hide-sm">${r.partner || ''}</td>
-          <td class="hide-sm">${r.campaign || ''}</td>
-          <td>${r.clicks}</td>
-          <td class="hide-sm">${(r.cr * 100).toFixed(2)}%</td>
-          <td class="hide-sm">$${r.aov.toFixed(2)}</td>
-          <td>${r.est_sales}</td>
-          <td>$${r.est_rev}</td>
-        </tr>`).join('')}
-    </tbody>
-  </table>
-</div>
-</div>
-</div>
+      <h2>Per Link — Estimated Sales & Revenue</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Slug</th>
+              <th>Partner</th>
+              <th>Campaign</th>
+              <th>Clicks</th>
+              <th>CR</th>
+              <th>AOV</th>
+              <th>Sales</th>
+              <th>Revenue</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${bySlug.map(r => `
+              <tr>
+                <td><code class="pill">${r.slug}</code></td>
+                <td>${r.partner || ''}</td>
+                <td>${r.campaign || ''}</td>
+                <td>${r.clicks}</td>
+                <td>${(r.cr * 100).toFixed(2)}%</td>
+                <td>$${Number(r.aov).toFixed(2)}</td>
+                <td>${r.est_sales}</td>
+                <td>$${Number(r.est_rev).toFixed(2)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
   <div class="card" style="margin-top:24px;text-align:center">
     <h2>📊 Download Spreadsheets</h2>
