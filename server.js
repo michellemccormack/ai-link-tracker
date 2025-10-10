@@ -592,8 +592,8 @@ app.get('/', requireAuth, (req, res) => {
                 <td style="max-width:360px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden">${l.target}</td>
                 <td>${l.partner || ''}</td>
                 <td>${l.campaign || ''}</td>
-                <td>${(((l.cr ?? ${DEFAULT_CR}) * 100).toFixed(2))}%</td>
-                <td>$${l.aov ?? ${DEFAULT_AOV}}</td>
+                <td>${(((l.cr ?? DEFAULT_CR) * 100).toFixed(2))}%</td>
+                <td>$${l.aov ?? DEFAULT_AOV}</td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -607,8 +607,8 @@ app.get('/', requireAuth, (req, res) => {
             <div class="mline"><span class="mleft">Target</span><span class="mright" style="max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.target}</span></div>
             <div class="mline"><span class="mleft">Partner</span><span class="mright">${l.partner || ''}</span></div>
             <div class="mline"><span class="mleft">Campaign</span><span class="mright">${l.campaign || ''}</span></div>
-            <div class="mline"><span class="mleft">CR</span><span class="mright">${(((l.cr ?? ${DEFAULT_CR}) * 100).toFixed(2))}%</span></div>
-            <div class="mline"><span class="mleft">AOV</span><span class="mright">$${l.aov ?? ${DEFAULT_AOV}}</span></div>
+            <div class="mline"><span class="mleft">CR</span><span class="mright">${(((l.cr ?? DEFAULT_CR) * 100).toFixed(2))}%</span></div>
+            <div class="mline"><span class="mleft">AOV</span><span class="mright">$${l.aov ?? DEFAULT_AOV}</span></div>
           </div>
         `).join('')}
       </div>
