@@ -174,6 +174,17 @@ function toCSV(rows) {
     .concat(rows.map((r) => headers.map((h) => escape(r[h])).join(',')))
     .join('\n');
 }
+// ---- Event logger (keep payload small) ----
+function logEvent(userId, type, dataObj = null, req = null) {
+  const data = dataObj ? JSON.stringify(dataObj).slice(0, 2000) : null;
+  const user_session = req?.cookies?.sb_session || null;
+  const url = req?.originalUrl || null;
+  const referer = req?.headers?.referer || null;
+  db.prepare(
+    `INSERT INTO events (user_id, type, user_session, url, referer, duration_ms, data)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(userId, type, user_session, url, referer, null, data);
+}
 
 // ---------- App ----------
 const app = express();
@@ -383,9 +394,17 @@ app.post('/admin/links', requireAuth, (req, res) => {
   const parsedAOV = parseMoney(aov);
 
   try {
-    db.prepare('INSERT INTO links (user_id, slug, target, partner, campaign, cr, aov) VALUES (?,?,?,?,?,?,?)')
-      .run(req.user.id, finalSlug, targetUrl, partner || null, campaign || null, parsedCR, parsedAOV);
-    res.redirect('/');
+db.prepare('INSERT INTO links (user_id, slug, target, partner, campaign, cr, aov) VALUES (?,?,?,?,?,?,?)')
+  .run(req.user.id, finalSlug, targetUrl, partner || null, campaign || null, parsedCR, parsedAOV);
+
+// Log event
+logEvent(
+  req.user.id,
+  'create_link',
+  { slug: finalSlug, target: targetUrl, partner, campaign, cr: parsedCR, aov: parsedAOV },
+  req
+);
+res.redirect('/');
   } catch (e) {
     res.status(400).send('Error: ' + e.message);
   }
