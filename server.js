@@ -253,41 +253,9 @@ app.get('/register', (req, res) => {
 </html>`);
 });
 
-// Register POST
+// Paywall enforced: no direct sign-ups here
 app.post('/register', (req, res) => {
-  const { email, password, password_confirm } = req.body;
-  
-  if (!email || !password || !password_confirm) {
-    return res.status(400).send('All fields required');
-  }
-  
-  if (password !== password_confirm) {
-    return res.status(400).send('Passwords do not match');
-  }
-  
-  if (password.length < 8) {
-    return res.status(400).send('Password must be at least 8 characters');
-  }
-  
-  const passwordHash = hashPassword(password);
-  
-  try {
-    const result = db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)').run(email.toLowerCase().trim(), passwordHash);
-    const token = createSession(result.lastInsertRowid);
-    res.cookie('session_token', token, {
-      httpOnly: true,
-      sameSite: 'Lax',
-      secure: IS_PROD,
-      path: '/',
-      maxAge: 30 * 24 * 60 * 60 * 1000
-    });
-    res.redirect('/');
-  } catch (e) {
-    if (e.message.includes('UNIQUE constraint failed')) {
-      return res.status(400).send('Email already registered');
-    }
-    res.status(500).send('Error creating account');
-  }
+  res.status(403).send('Signups are paywalled. Please purchase via our Gumroad link to receive access.');
 });
 
 // Login page
