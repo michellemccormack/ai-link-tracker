@@ -323,7 +323,10 @@ app.get('/admin', requireAdmin, (req, res) => {
   :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; }
   *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg)}
   .wrap{max-width:1200px;margin:28px auto;padding:0 18px}
-  h1{font-size:36px;margin:0 0 16px}
+  .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+  h1{font-size:36px;margin:0}
+  .home-btn{background:#fff;color:#0b0f17;text-decoration:none;padding:10px 20px;border-radius:10px;font-weight:600;font-size:14px;display:inline-block}
+  .home-btn:hover{background:#e5e7eb}
   .grid{display:grid;grid-template-columns:1fr 2fr;gap:22px}
   .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:20px}
   table{width:100%;border-collapse:collapse;color:var(--fg)}
@@ -335,7 +338,10 @@ app.get('/admin', requireAdmin, (req, res) => {
 </head>
 <body>
 <div class="wrap">
-  <h1>${SITE_NAME}: Admin Dashboard</h1>
+  <div class="header">
+    <h1>${SITE_NAME}: Admin Dashboard</h1>
+    <a href="/" class="home-btn">LINK TRACKER PRO</a>
+  </div>
   <div class="grid">
     <div class="card">
       <h2>Summary</h2>
