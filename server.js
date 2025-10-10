@@ -471,6 +471,8 @@ app.get('/', requireAuth, (req, res) => {
 <link rel="icon" href="https://images.squarespace-cdn.com/content/5fda7223b81df0383220530f/e10cb1e3-909d-46f9-9162-1338f1956488/%3Apublic%3Afavicon.png?content-type=image%2Fpng" sizes="32x32" />
 <style>
   :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; --chip:#1f2937; }
+
+  /* Base */
   *{ box-sizing:border-box; }
   body{ margin:0; background:var(--bg); color:var(--fg); font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
   .wrap{ max-width:1150px; margin:28px auto; padding:0 18px; }
@@ -485,14 +487,14 @@ app.get('/', requireAuth, (req, res) => {
   .grid{ display:grid; grid-template-columns:1fr 1fr; gap:22px; }
   .card{ background:var(--card); border:1px solid #1f2937; border-radius:14px; padding:20px; }
 
-  /* form */
+  /* Form — single column on desktop to avoid overlapping */
   label{ display:block; margin:10px 0 6px; }
   input{ width:100%; min-width:0; padding:10px; border:1px solid #263041; border-radius:10px; background:#0b1220; color:var(--fg); }
   button{ background:var(--accent); color:#fff; border:none; border-radius:10px; padding:10px 14px; margin-top:12px; cursor:pointer; font-weight:600; }
-  .form-row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .form-row{ display:grid; grid-template-columns:1fr; gap:10px; }      /* << single column */
   .form-row > div{ min-width:0; }
 
-  /* table (desktop) */
+  /* Table (desktop) */
   a{ color:var(--link); text-decoration:none; } a:hover{ text-decoration:underline; }
   .table-wrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
   table{ width:100%; border-collapse:collapse; color:var(--fg); }
@@ -501,14 +503,7 @@ app.get('/', requireAuth, (req, res) => {
   .table-desktop{ display:block; }
   .list-mobile{ display:none; }
 
-  /* mobile card list */
-  .mrow{ display:flex; flex-direction:column; gap:8px; background:var(--card); border:1px solid #1f2937; border-radius:12px; padding:14px; }
-  .mline{ display:flex; justify-content:space-between; gap:12px; }
-  .mleft{ color:var(--muted); font-size:12px; }
-  .mright{ font-weight:600; }
-  .slug-chip{ background:var(--chip); color:#93c5fd; padding:2px 6px; border-radius:6px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; display:inline-block; }
-
-  /* mobile (≤ 720px) */
+  /* Mobile (≤ 720px) */
   @media (max-width: 720px){
     .wrap{ padding:0 12px; }
     h1{ font-size:24px; line-height:1.2; }
@@ -518,11 +513,23 @@ app.get('/', requireAuth, (req, res) => {
     .card{ padding:16px; }
     label{ margin:8px 0 4px; }
     input{ padding:14px; font-size:16px; }
-    .form-row{ grid-template-columns:1fr; }   /* stack inputs on phones */
+    .form-row{ grid-template-columns:1fr; }   /* stays single column on mobile */
 
-    .table-desktop{ display:none; }          /* hide table on phones */
-    .list-mobile{ display:flex; flex-direction:column; gap:12px; } /* show cards */
+    /* Replace table with cards on phones */
+    .table-desktop{ display:none; }
+    .list-mobile{ display:flex; flex-direction:column; gap:12px; }
+
+    /* If table ever shows, force scroll, not squish */
+    table{ min-width:720px; }
+    th,td{ padding:10px 12px; font-size:14px; white-space:nowrap; }
   }
+
+  /* Mobile card list visuals */
+  .mrow{ display:flex; flex-direction:column; gap:8px; background:var(--card); border:1px solid #1f2937; border-radius:12px; padding:14px; }
+  .mline{ display:flex; justify-content:space-between; gap:12px; }
+  .mleft{ color:var(--muted); font-size:12px; }
+  .mright{ font-weight:600; min-width:0; }
+  .slug-chip{ background:var(--chip); color:#93c5fd; padding:2px 6px; border-radius:6px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; display:inline-block; }
 </style>
 </head>
 <body>
