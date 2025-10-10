@@ -108,14 +108,21 @@ function hashPassword(password) {
 
 function createSession(userId) {
   const token = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-  db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)').run(userId, token, expiresAt.toISOString());
+  // store as UNIX epoch seconds
+  const expiresAt = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
+  db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)').run(
+    userId,
+    token,
+    expiresAt
+  );
   return token;
 }
 
 function getUserFromSession(token) {
   if (!token) return null;
-  const session = db.prepare('SELECT user_id FROM sessions WHERE token = ? AND expires_at > datetime("now")').get(token);
+  const session = db
+    .prepare("SELECT user_id FROM sessions WHERE token = ? AND expires_at > strftime('%s','now')")
+    .get(token);
   return session ? db.prepare('SELECT * FROM users WHERE id = ?').get(session.user_id) : null;
 }
 
