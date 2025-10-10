@@ -497,7 +497,7 @@ app.get('/', requireAuth, (req, res) => {
   /* Table (desktop) */
   a{ color:var(--link); text-decoration:none; } a:hover{ text-decoration:underline; }
   .table-wrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
-  table{ width:100%; border-collapse:collapse; color:var(--fg); }
+  table{ width:100%; border-collapse:collapse; color:var(--fg); max-width:100%; }
   th{ color:var(--fg-strong); text-align:left; border-bottom:1px solid #1f2937; padding:10px 8px; }
   td{ color:var(--fg); border-bottom:1px solid #1f2937; padding:10px 8px; }
   .table-desktop{ display:block; }
@@ -520,7 +520,7 @@ app.get('/', requireAuth, (req, res) => {
     .list-mobile{ display:flex; flex-direction:column; gap:12px; }
 
     /* If table ever shows, force scroll, not squish */
-   table{ min-width:600px; } 
+   table{ min-width:auto; width:100%; }
     th,td{ padding:10px 12px; font-size:14px; white-space:nowrap; }
   }
 
@@ -752,16 +752,20 @@ app.get('/admin', requireAuth, (req, res) => {
   .mright { font-weight:600; }
   .slug-chip { background:var(--chip); color:#93c5fd; padding:2px 6px; border-radius:6px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; display:inline-block; }
 
-  /* Mobile (≤ 600px): hide table, show cards, single column grid */
-  @media (max-width: 600px) {
-    .wrap { padding:0 12px; }
-    h1 { font-size:24px; line-height:1.2; }
-    .header { flex-direction:column; gap:10px; align-items:flex-start; }
-    .home-btn { width:100%; text-align:center; }
-    .grid { grid-template-columns:1fr; gap:16px; }
-    .card { padding:16px; }
-    .table-desktop { display:none; }
-    .list-mobile { display:flex; flex-direction:column; gap:12px; }
+/* Mobile (≤ 600px): hide table, show cards, single column grid */
+@media (max-width: 600px) {
+  .wrap{ padding:0 12px; }
+  h1{ font-size:24px; line-height:1.2; }
+  .header{ flex-direction:column; gap:10px; align-items:flex-start; }
+  .admin-btn,.logout-btn{ width:100%; text-align:center; }
+  .grid{ grid-template-columns:1fr; gap:16px; }
+  .card{ padding:16px; }
+  label{ margin:8px 0 4px; }
+  input{ padding:14px; font-size:16px; }
+  .form-row{ grid-template-columns:1fr; } /* stack inputs */
+
+  .table-desktop{ display:none; }  /* hide table on phones */
+  .list-mobile{ display:flex; flex-direction:column; gap:12px; } /* show cards */
   }
 </style>
 </head>
