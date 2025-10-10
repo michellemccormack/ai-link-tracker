@@ -612,5 +612,5 @@ res.send(toCSV(rows));
 app.get('/health', (req, res) => res.json({ ok: true }));
 // ---------- Start ----------
 app.listen(PORT, () => {
-console.log(Server running on http://localhost:${PORT});
+console.log(`Server running on http://localhost:${PORT}`);
 });
