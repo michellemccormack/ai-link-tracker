@@ -653,8 +653,8 @@ app.post('/webhooks/gumroad', (req, res) => {
 // ---------- Admin ----------
 // ---------- Admin ----------
 // ---------- Admin (mobile-optimized & 500-safe) ----------
+// ---------- Admin (desktop table + mobile cards) ----------
 app.get('/admin', requireAuth, (req, res) => {
-  // Totals (safe, no toFixed on nulls)
   const totals = db.prepare(`
     SELECT
       (SELECT COUNT(*) FROM pageviews WHERE user_id = ?) AS views,
@@ -664,12 +664,11 @@ app.get('/admin', requireAuth, (req, res) => {
         WHERE user_id = ? AND type = 'time_on_site') AS avg_ms
   `).get(req.user.id, req.user.id, req.user.id) || { views: 0, clicks: 0, avg_ms: null };
 
-  // Per-slug; defer math to JS to avoid NULL math issues
   const raw = db.prepare(`
     SELECT l.slug, l.partner, l.campaign,
-           COUNT(c.id)                 AS clicks,
-           COALESCE(l.cr,  ?)         AS cr,
-           COALESCE(l.aov, ?)         AS aov
+           COUNT(c.id)         AS clicks,
+           COALESCE(l.cr,  ?)  AS cr,
+           COALESCE(l.aov, ?)  AS aov
       FROM links l
       LEFT JOIN clicks c
         ON c.slug = l.slug
@@ -679,7 +678,6 @@ app.get('/admin', requireAuth, (req, res) => {
   ORDER BY clicks DESC
   `).all(DEFAULT_CR, DEFAULT_AOV, req.user.id, req.user.id);
 
-  // Compute estimates in JS (all numbers; no toFixed on null)
   let totalRevenue = 0;
   const bySlug = raw.map(r => {
     const clicks  = Number(r.clicks || 0);
@@ -703,7 +701,7 @@ app.get('/admin', requireAuth, (req, res) => {
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet" />
 <link rel="icon" href="https://images.squarespace-cdn.com/content/5fda7223b81df0383220530f/e10cb1e3-909d-46f9-9162-1338f1956488/%3Apublic%3Afavicon.png?content-type=image%2Fpng" sizes="32x32" />
 <style>
-  :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; }
+  :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; --chip:#1f2937; }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--fg); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
   .wrap { max-width:1200px; margin:28px auto; padding:0 18px; }
@@ -715,14 +713,22 @@ app.get('/admin', requireAuth, (req, res) => {
   .card { background:var(--card); border:1px solid #1f2937; border-radius:14px; padding:20px; }
   a { color:var(--link); text-decoration:none; } a:hover { text-decoration:underline; }
 
-  /* Tables */
+  /* Desktop table */
   .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
   table { width:100%; border-collapse:collapse; color:var(--fg); }
   th { color:var(--fg-strong); text-align:left; border-bottom:1px solid #1f2937; padding:10px 8px; }
   td { color:var(--fg); border-bottom:1px solid #1f2937; padding:10px 8px; }
-  .hide-sm { display:table-cell; }
+  .table-desktop { display:block; }
+  .list-mobile { display:none; }
 
-  /* Mobile */
+  /* Mobile cards */
+  .mrow { display:flex; flex-direction:column; gap:8px; background:var(--card); border:1px solid #1f2937; border-radius:12px; padding:14px; }
+  .mline { display:flex; justify-content:space-between; gap:12px; }
+  .mleft { color:var(--muted); font-size:12px; }
+  .mright { font-weight:600; }
+  .slug-chip { background:var(--chip); color:#93c5fd; padding:2px 6px; border-radius:6px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; display:inline-block; }
+
+  /* Mobile (≤ 720px): hide table, show cards, single column grid */
   @media (max-width: 720px) {
     .wrap { padding:0 12px; }
     h1 { font-size:24px; line-height:1.2; }
@@ -730,10 +736,8 @@ app.get('/admin', requireAuth, (req, res) => {
     .home-btn { width:100%; text-align:center; }
     .grid { grid-template-columns:1fr; gap:16px; }
     .card { padding:16px; }
-    .table-wrap { overflow-x:auto; }
-    table { min-width: 720px; }
-    th, td { padding:10px 12px; font-size:14px; white-space:nowrap; }
-    .hide-sm { display:none; }
+    .table-desktop { display:none; }
+    .list-mobile { display:flex; flex-direction:column; gap:12px; }
   }
 </style>
 </head>
@@ -755,16 +759,18 @@ app.get('/admin', requireAuth, (req, res) => {
 
       <div class="card">
         <h2>Per Link — Estimated Sales & Revenue</h2>
-        <div class="table-wrap">
+
+        <!-- Desktop table -->
+        <div class="table-wrap table-desktop">
           <table>
             <thead>
               <tr>
                 <th>Slug</th>
-                <th class="hide-sm">Partner</th>
-                <th class="hide-sm">Campaign</th>
+                <th>Partner</th>
+                <th>Campaign</th>
                 <th>Clicks</th>
-                <th class="hide-sm">CR</th>
-                <th class="hide-sm">AOV</th>
+                <th>CR</th>
+                <th>AOV</th>
                 <th>Sales</th>
                 <th>Revenue</th>
               </tr>
@@ -772,18 +778,34 @@ app.get('/admin', requireAuth, (req, res) => {
             <tbody>
               ${bySlug.map(r => `
                 <tr>
-                  <td><code style="background:#1f2937;color:#93c5fd;padding:2px 6px;border-radius:6px">${r.slug}</code></td>
-                  <td class="hide-sm">${r.partner || ''}</td>
-                  <td class="hide-sm">${r.campaign || ''}</td>
+                  <td><code class="slug-chip">${r.slug}</code></td>
+                  <td>${r.partner || ''}</td>
+                  <td>${r.campaign || ''}</td>
                   <td>${r.clicks}</td>
-                  <td class="hide-sm">${(r.cr * 100).toFixed(2)}%</td>
-                  <td class="hide-sm">$${r.aov.toFixed(2)}</td>
+                  <td>${(r.cr * 100).toFixed(2)}%</td>
+                  <td>$${r.aov.toFixed(2)}</td>
                   <td>${r.est_sales.toFixed(2)}</td>
                   <td>$${r.est_rev.toFixed(2)}</td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
+        </div>
+
+        <!-- Mobile card list -->
+        <div class="list-mobile">
+          ${bySlug.map(r => `
+            <div class="mrow">
+              <div class="mline"><span class="mleft">Slug</span><span class="mright"><code class="slug-chip">${r.slug}</code></span></div>
+              <div class="mline"><span class="mleft">Partner</span><span class="mright">${r.partner || ''}</span></div>
+              <div class="mline"><span class="mleft">Campaign</span><span class="mright">${r.campaign || ''}</span></div>
+              <div class="mline"><span class="mleft">Clicks</span><span class="mright">${r.clicks}</span></div>
+              <div class="mline"><span class="mleft">CR</span><span class="mright">${(r.cr * 100).toFixed(2)}%</span></div>
+              <div class="mline"><span class="mleft">AOV</span><span class="mright">$${r.aov.toFixed(2)}</span></div>
+              <div class="mline"><span class="mleft">Sales</span><span class="mright">${r.est_sales.toFixed(2)}</span></div>
+              <div class="mline"><span class="mleft">Revenue</span><span class="mright">$${r.est_rev.toFixed(2)}</span></div>
+            </div>
+          `).join('')}
         </div>
       </div>
     </div>
