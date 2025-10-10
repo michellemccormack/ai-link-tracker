@@ -520,7 +520,7 @@ app.get('/', requireAuth, (req, res) => {
     .list-mobile{ display:flex; flex-direction:column; gap:12px; }
 
     /* If table ever shows, force scroll, not squish */
-    table{ min-width:720px; }
+   table{ min-width:600px; } 
     th,td{ padding:10px 12px; font-size:14px; white-space:nowrap; }
   }
 
@@ -752,8 +752,8 @@ app.get('/admin', requireAuth, (req, res) => {
   .mright { font-weight:600; }
   .slug-chip { background:var(--chip); color:#93c5fd; padding:2px 6px; border-radius:6px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; display:inline-block; }
 
-  /* Mobile (≤ 720px): hide table, show cards, single column grid */
-  @media (max-width: 720px) {
+  /* Mobile (≤ 600px): hide table, show cards, single column grid */
+  @media (max-width: 600px) {
     .wrap { padding:0 12px; }
     h1 { font-size:24px; line-height:1.2; }
     .header { flex-direction:column; gap:10px; align-items:flex-start; }
