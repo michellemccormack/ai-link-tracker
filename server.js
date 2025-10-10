@@ -489,8 +489,7 @@ app.get('/', requireAuth, (req, res) => {
   button{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 14px;margin-top:12px;cursor:pointer;font-weight:600}
 
   .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  /* ensure no overlap / shrinking on narrow widths */
-  .form-row > div{min-width:0}
+  .form-row > div{min-width:0} /* prevents overlap/shrink issues */
 
   /* Table */
   a{color:var(--link);text-decoration:none} a:hover{text-decoration:underline}
@@ -518,7 +517,7 @@ app.get('/', requireAuth, (req, res) => {
     table{min-width:720px}
     th,td{padding:10px 12px;font-size:14px;white-space:nowrap}
 
-    /* optional: hide lower-priority cols on phones */
+    /* hide lower-priority cols on phones */
     .hide-sm{display:none}
   }
 </style>
