@@ -1,7 +1,7 @@
 /**
  * Link Tracker Pro — Multi-tenant with User Authentication
  */
-const IS_PROD = process.env.NODE_ENV === 'production';
+
 const express = require('express');
 const Database = require('better-sqlite3');
 const cookieParser = require('cookie-parser');
@@ -12,9 +12,10 @@ const path = require('path');
 
 // ---------- Config ----------
 const PORT = process.env.PORT || 3000;
-const DB_PATH = process.env.DB_PATH || './tracker.db';
+const DB_PATH = process.env.DB_PATH || '/var/data/tracker-v2.db';
 const SITE_NAME = process.env.SITE_NAME || 'Link Tracker Pro';
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const IS_PROD = process.env.NODE_ENV === 'production';
 
 const DEFAULT_CR = Number(process.env.DEFAULT_CR || 0.008); // 0.8%
 const DEFAULT_AOV = Number(process.env.DEFAULT_AOV || 45);  // $45
@@ -169,14 +170,22 @@ function toCSV(rows) {
 
 // ---------- App ----------
 const app = express();
-app.set('trust proxy', 1);
+app.set('trust proxy', 1); // important behind Render/Proxies for secure cookies
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
 // lightweight session cookie
 app.use((req, res, next) => {
-  if (!req.cookies.sb_session) res.cookie('sb_session', nanoid(), { httpOnly: false, sameSite: 'Lax' });
+  if (!req.cookies.sb_session) {
+    res.cookie('sb_session', nanoid(), {
+      httpOnly: false,     // readable by client JS if you want
+      sameSite: 'Lax',
+      secure: IS_PROD,     // only marked Secure in production (https)
+      path: '/'
+    });
+  }
   next();
 });
 
@@ -247,7 +256,13 @@ app.post('/register', (req, res) => {
   try {
     const result = db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)').run(email.toLowerCase().trim(), passwordHash);
     const token = createSession(result.lastInsertRowid);
-    res.cookie('session_token', token, { httpOnly: true, maxAge: 30 * 24 * 60 * 60 * 1000 });
+    res.cookie('session_token', token, {
+      httpOnly: true,
+      sameSite: 'Lax',
+      secure: IS_PROD,
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60 * 1000
+    });
     res.redirect('/');
   } catch (e) {
     if (e.message.includes('UNIQUE constraint failed')) {
@@ -313,7 +328,13 @@ app.post('/login', (req, res) => {
   }
   
   const token = createSession(user.id);
-  res.cookie('session_token', token, { httpOnly: true, maxAge: 30 * 24 * 60 * 60 * 1000 });
+  res.cookie('session_token', token, {
+    httpOnly: true,
+    sameSite: 'Lax',
+    secure: IS_PROD,
+    path: '/',
+    maxAge: 30 * 24 * 60 * 60 * 1000
+  });
   res.redirect('/');
 });
 
@@ -323,7 +344,7 @@ app.get('/logout', (req, res) => {
   if (token) {
     db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
   }
-  res.clearCookie('session_token');
+  res.clearCookie('session_token', { path: '/' });
   res.redirect('/login');
 });
 
@@ -377,7 +398,7 @@ app.get('/', requireAuth, (req, res) => {
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
   :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; }
-  *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg)}
+  *{box-sizing;border-box} body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg)}
   .wrap{max-width:1150px;margin:28px auto;padding:0 18px}
   .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
   h1{font-size:36px;margin:0}
@@ -606,12 +627,14 @@ WHERE l.user_id = ?
 GROUP BY l.slug
 ORDER BY clicks DESC
 `).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV, req.user.id, req.user.id);
-res.setHeader('Content-Type', 'text/csv');
-res.send(toCSV(rows));
+  res.setHeader('Content-Type', 'text/csv');
+  res.send(toCSV(rows));
 });
+
 // ---------- Health ----------
 app.get('/health', (req, res) => res.json({ ok: true }));
+
 // ---------- Start ----------
 app.listen(PORT, () => {
-console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });
