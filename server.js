@@ -1,7 +1,7 @@
 /**
  * Link Tracker Pro — Multi-tenant with User Authentication
  */
-
+const IS_PROD = process.env.NODE_ENV === 'production';
 const express = require('express');
 const Database = require('better-sqlite3');
 const cookieParser = require('cookie-parser');
@@ -169,6 +169,7 @@ function toCSV(rows) {
 
 // ---------- App ----------
 const app = express();
+app.set('trust proxy', 1);
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
