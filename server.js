@@ -1,11 +1,10 @@
 /**
- * Link Tracker Pro — Tracking & Estimation Agent (Stable + Contrast Fix)
+ * Link Tracker Pro — Multi-tenant with User Authentication
  */
 
 const express = require('express');
 const Database = require('better-sqlite3');
 const cookieParser = require('cookie-parser');
-const basicAuth = require('basic-auth');
 const crypto = require('crypto');
 const { customAlphabet } = require('nanoid');
 const fs = require('fs');
@@ -13,9 +12,9 @@ const path = require('path');
 
 // ---------- Config ----------
 const PORT = process.env.PORT || 3000;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme';
 const DB_PATH = process.env.DB_PATH || './tracker.db';
 const SITE_NAME = process.env.SITE_NAME || 'Link Tracker Pro';
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 
 const DEFAULT_CR = Number(process.env.DEFAULT_CR || 0.008); // 0.8%
 const DEFAULT_AOV = Number(process.env.DEFAULT_AOV || 45);  // $45
@@ -27,19 +26,32 @@ fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 
+// Users table
+db.prepare(`CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`).run();
+
+// Add user_id to existing tables
 db.prepare(`CREATE TABLE IF NOT EXISTS links (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  slug TEXT UNIQUE,
+  user_id INTEGER NOT NULL,
+  slug TEXT NOT NULL,
   target TEXT NOT NULL,
   partner TEXT,
   campaign TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   cr REAL,
-  aov REAL
+  aov REAL,
+  UNIQUE(user_id, slug),
+  FOREIGN KEY (user_id) REFERENCES users(id)
 )`).run();
 
 db.prepare(`CREATE TABLE IF NOT EXISTS clicks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
   slug TEXT,
   click_id TEXT,
   ts DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -49,37 +61,69 @@ db.prepare(`CREATE TABLE IF NOT EXISTS clicks (
   utm_source TEXT,
   utm_medium TEXT,
   utm_campaign TEXT,
-  user_session TEXT
+  user_session TEXT,
+  FOREIGN KEY (user_id) REFERENCES users(id)
 )`).run();
 
 db.prepare(`CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
   type TEXT,
   ts DATETIME DEFAULT CURRENT_TIMESTAMP,
   user_session TEXT,
   url TEXT,
   referer TEXT,
   duration_ms INTEGER,
-  data TEXT
+  data TEXT,
+  FOREIGN KEY (user_id) REFERENCES users(id)
 )`).run();
 
 db.prepare(`CREATE TABLE IF NOT EXISTS pageviews (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
   ts DATETIME DEFAULT CURRENT_TIMESTAMP,
   user_session TEXT,
   url TEXT,
-  referer TEXT
+  referer TEXT,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+)`).run();
+
+// Sessions table
+db.prepare(`CREATE TABLE IF NOT EXISTS sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  token TEXT UNIQUE NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  expires_at DATETIME NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id)
 )`).run();
 
 // ---------- Helpers ----------
 const nanoid = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 10);
 
-function requireAdmin(req, res, next) {
-  const user = basicAuth(req);
-  if (!user || user.pass !== ADMIN_PASSWORD) {
-    res.set('WWW-Authenticate', 'Basic realm="admin"');
-    return res.status(401).send('Auth required');
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password + SESSION_SECRET).digest('hex');
+}
+
+function createSession(userId) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+  db.prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, ?)').run(userId, token, expiresAt.toISOString());
+  return token;
+}
+
+function getUserFromSession(token) {
+  if (!token) return null;
+  const session = db.prepare('SELECT user_id FROM sessions WHERE token = ? AND expires_at > datetime("now")').get(token);
+  return session ? db.prepare('SELECT * FROM users WHERE id = ?').get(session.user_id) : null;
+}
+
+function requireAuth(req, res, next) {
+  const user = getUserFromSession(req.cookies.session_token);
+  if (!user) {
+    return res.redirect('/login');
   }
+  req.user = user;
   next();
 }
 
@@ -95,9 +139,9 @@ function parseConversionRate(input) {
   const cleaned = input.toString().replace(/[^0-9.]/g, '');
   const num = parseFloat(cleaned);
   if (!num || isNaN(num)) return DEFAULT_CR;
-  if (num > 1) return num / 100;     // 8  -> 8%
-  if (num > 0.2) return num / 100;   // 0.8 -> 0.8%
-  return num;                        // 0.008 etc
+  if (num > 1) return num / 100;
+  if (num > 0.2) return num / 100;
+  return num;
 }
 
 function parseMoney(input) {
@@ -135,14 +179,160 @@ app.use((req, res, next) => {
   next();
 });
 
+// ---------- Auth Routes ----------
+
+// Registration page
+app.get('/register', (req, res) => {
+  res.send(`<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Register — ${SITE_NAME}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; }
+  *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg);display:flex;align-items:center;justify-content:center;min-height:100vh}
+  .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:40px;max-width:400px;width:100%;margin:20px}
+  h1{font-size:32px;margin:0 0 24px;text-align:center}
+  label{display:block;margin:16px 0 6px;font-weight:600}
+  input{width:100%;padding:12px;border:1px solid #263041;border-radius:10px;background:#0b1220;color:var(--fg);font-size:16px}
+  button{width:100%;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px;margin-top:20px;cursor:pointer;font-weight:600;font-size:16px}
+  button:hover{background:#4338ca}
+  .link{text-align:center;margin-top:16px}
+  a{color:var(--link);text-decoration:none} a:hover{text-decoration:underline}
+  .error{background:#7f1d1d;border:1px solid #991b1b;color:#fecaca;padding:12px;border-radius:8px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>${SITE_NAME}</h1>
+  <h2 style="margin:0 0 24px;font-size:20px;text-align:center;color:var(--muted)">Create your account</h2>
+  <form method="POST" action="/register">
+    <label>Email</label>
+    <input type="email" name="email" required autocomplete="email">
+    <label>Password</label>
+    <input type="password" name="password" required minlength="8" autocomplete="new-password">
+    <label>Confirm Password</label>
+    <input type="password" name="password_confirm" required minlength="8" autocomplete="new-password">
+    <button type="submit">Create Account</button>
+  </form>
+  <div class="link">
+    Already have an account? <a href="/login">Log in</a>
+  </div>
+</div>
+</body>
+</html>`);
+});
+
+// Register POST
+app.post('/register', (req, res) => {
+  const { email, password, password_confirm } = req.body;
+  
+  if (!email || !password || !password_confirm) {
+    return res.status(400).send('All fields required');
+  }
+  
+  if (password !== password_confirm) {
+    return res.status(400).send('Passwords do not match');
+  }
+  
+  if (password.length < 8) {
+    return res.status(400).send('Password must be at least 8 characters');
+  }
+  
+  const passwordHash = hashPassword(password);
+  
+  try {
+    const result = db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)').run(email.toLowerCase().trim(), passwordHash);
+    const token = createSession(result.lastInsertRowid);
+    res.cookie('session_token', token, { httpOnly: true, maxAge: 30 * 24 * 60 * 60 * 1000 });
+    res.redirect('/');
+  } catch (e) {
+    if (e.message.includes('UNIQUE constraint failed')) {
+      return res.status(400).send('Email already registered');
+    }
+    res.status(500).send('Error creating account');
+  }
+});
+
+// Login page
+app.get('/login', (req, res) => {
+  res.send(`<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Login — ${SITE_NAME}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; }
+  *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg);display:flex;align-items:center;justify-content:center;min-height:100vh}
+  .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:40px;max-width:400px;width:100%;margin:20px}
+  h1{font-size:32px;margin:0 0 24px;text-align:center}
+  label{display:block;margin:16px 0 6px;font-weight:600}
+  input{width:100%;padding:12px;border:1px solid #263041;border-radius:10px;background:#0b1220;color:var(--fg);font-size:16px}
+  button{width:100%;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px;margin-top:20px;cursor:pointer;font-weight:600;font-size:16px}
+  button:hover{background:#4338ca}
+  .link{text-align:center;margin-top:16px}
+  a{color:var(--link);text-decoration:none} a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>${SITE_NAME}</h1>
+  <h2 style="margin:0 0 24px;font-size:20px;text-align:center;color:var(--muted)">Welcome back</h2>
+  <form method="POST" action="/login">
+    <label>Email</label>
+    <input type="email" name="email" required autocomplete="email">
+    <label>Password</label>
+    <input type="password" name="password" required autocomplete="current-password">
+    <button type="submit">Log In</button>
+  </form>
+  <div class="link">
+    Don't have an account? <a href="/register">Sign up</a>
+  </div>
+</div>
+</body>
+</html>`);
+});
+
+// Login POST
+app.post('/login', (req, res) => {
+  const { email, password } = req.body;
+  
+  if (!email || !password) {
+    return res.status(400).send('Email and password required');
+  }
+  
+  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim());
+  
+  if (!user || user.password_hash !== hashPassword(password)) {
+    return res.status(401).send('Invalid email or password');
+  }
+  
+  const token = createSession(user.id);
+  res.cookie('session_token', token, { httpOnly: true, maxAge: 30 * 24 * 60 * 60 * 1000 });
+  res.redirect('/');
+});
+
+// Logout
+app.get('/logout', (req, res) => {
+  const token = req.cookies.session_token;
+  if (token) {
+    db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+  }
+  res.clearCookie('session_token');
+  res.redirect('/login');
+});
+
 // ---------- Create link ----------
-app.post('/admin/links', (req, res) => {
+app.post('/admin/links', requireAuth, (req, res) => {
   const { target, partner, campaign, cr, aov } = req.body;
 
   let targetUrl = (target || '').trim();
   if (targetUrl && !/^https?:\/\//i.test(targetUrl)) targetUrl = 'https://' + targetUrl;
 
-  // Build slug with partner name prominently
   let baseSlug;
   if (partner && partner.trim()) {
     const partnerSlug = slugify(partner);
@@ -152,21 +342,20 @@ app.post('/admin/links', (req, res) => {
     baseSlug = campaign ? slugify(campaign) : `link-${nanoid()}`;
   }
 
-  // Check if slug exists, if so add a short suffix
   let finalSlug = baseSlug;
   let attempt = 0;
-  while (db.prepare('SELECT id FROM links WHERE slug = ?').get(finalSlug)) {
+  while (db.prepare('SELECT id FROM links WHERE user_id = ? AND slug = ?').get(req.user.id, finalSlug)) {
     attempt++;
     finalSlug = `${baseSlug}-${nanoid().slice(0, 4)}`;
-    if (attempt > 10) break; // safety
+    if (attempt > 10) break;
   }
 
   const parsedCR = parseConversionRate(cr);
   const parsedAOV = parseMoney(aov);
 
   try {
-    db.prepare('INSERT INTO links (slug, target, partner, campaign, cr, aov) VALUES (?,?,?,?,?,?)')
-      .run(finalSlug, targetUrl, partner || null, campaign || null, parsedCR, parsedAOV);
+    db.prepare('INSERT INTO links (user_id, slug, target, partner, campaign, cr, aov) VALUES (?,?,?,?,?,?,?)')
+      .run(req.user.id, finalSlug, targetUrl, partner || null, campaign || null, parsedCR, parsedAOV);
     res.redirect('/');
   } catch (e) {
     res.status(400).send('Error: ' + e.message);
@@ -174,8 +363,8 @@ app.post('/admin/links', (req, res) => {
 });
 
 // ---------- Home ----------
-app.get('/', (req, res) => {
-  const links = db.prepare('SELECT * FROM links ORDER BY id DESC LIMIT 20').all();
+app.get('/', requireAuth, (req, res) => {
+  const links = db.prepare('SELECT * FROM links WHERE user_id = ? ORDER BY id DESC LIMIT 20').all(req.user.id);
 
   res.send(`<!doctype html>
 <html>
@@ -191,8 +380,11 @@ app.get('/', (req, res) => {
   .wrap{max-width:1150px;margin:28px auto;padding:0 18px}
   .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
   h1{font-size:36px;margin:0}
-  .admin-btn{background:#fff;color:#0b0f17;text-decoration:none;padding:10px 20px;border-radius:10px;font-weight:600;font-size:14px;display:inline-block}
-  .admin-btn:hover{background:#e5e7eb}
+  .header-right{display:flex;gap:12px;align-items:center}
+  .user-email{color:var(--muted);font-size:14px}
+  .admin-btn, .logout-btn{background:#fff;color:#0b0f17;text-decoration:none;padding:10px 20px;border-radius:10px;font-weight:600;font-size:14px;display:inline-block;border:none;cursor:pointer}
+  .admin-btn:hover, .logout-btn:hover{background:#e5e7eb}
+  .logout-btn{background:#1f2937;color:var(--fg)}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
   .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:20px}
   label{display:block;margin:10px 0 6px}
@@ -208,7 +400,11 @@ app.get('/', (req, res) => {
 <div class="wrap">
   <div class="header">
     <h1>${SITE_NAME}: Tracking & Estimation Agent</h1>
-    <a href="/admin" class="admin-btn">ADMIN DASHBOARD</a>
+    <div class="header-right">
+      <span class="user-email">${req.user.email}</span>
+      <a href="/admin" class="admin-btn">ADMIN DASHBOARD</a>
+      <a href="/logout" class="logout-btn">Logout</a>
+    </div>
   </div>
   <div class="grid">
     <div class="card">
@@ -265,14 +461,16 @@ app.get('/', (req, res) => {
 
 // ---------- Redirect ----------
 app.get('/r/:slug', (req, res) => {
-  const row = db.prepare('SELECT * FROM links WHERE slug = ?').get(req.params.slug);
+  // Find link - try to match with any user since slugs should be unique across users for cleaner URLs
+  const row = db.prepare('SELECT * FROM links WHERE slug = ? LIMIT 1').get(req.params.slug);
   if (!row) return res.status(404).send('Not found');
 
   const clickId = nanoid();
   db.prepare(
-    `INSERT INTO clicks (slug, click_id, ip_hash, ua, referer, user_session)
-     VALUES (?,?,?,?,?,?)`
+    `INSERT INTO clicks (user_id, slug, click_id, ip_hash, ua, referer, user_session)
+     VALUES (?,?,?,?,?,?,?)`
   ).run(
+    row.user_id,
     row.slug,
     clickId,
     ipHash(req),
@@ -282,23 +480,21 @@ app.get('/r/:slug', (req, res) => {
   );
 
   const url = new URL(row.target);
-  // Add partner parameter first (capitalized)
   if (row.partner) {
     url.searchParams.set('partner', row.partner.toUpperCase());
   }
-  // Then add click tracking parameter
   url.searchParams.set('sb_click', clickId);
   res.redirect(url.toString());
 });
 
 // ---------- Admin ----------
-app.get('/admin', requireAdmin, (req, res) => {
+app.get('/admin', requireAuth, (req, res) => {
   const totals = db.prepare(`
     SELECT
-      (SELECT COUNT(*) FROM clicks) AS clicks,
-      (SELECT COUNT(*) FROM pageviews) AS views,
-      (SELECT ROUND(AVG(duration_ms),0) FROM events WHERE type='time_on_site') AS avg_ms
-  `).get();
+      (SELECT COUNT(*) FROM clicks WHERE user_id = ?) AS clicks,
+      (SELECT COUNT(*) FROM pageviews WHERE user_id = ?) AS views,
+      (SELECT ROUND(AVG(duration_ms),0) FROM events WHERE user_id = ? AND type='time_on_site') AS avg_ms
+  `).get(req.user.id, req.user.id, req.user.id);
 
   const bySlug = db.prepare(`
     SELECT l.slug, l.partner, l.campaign,
@@ -308,10 +504,11 @@ app.get('/admin', requireAdmin, (req, res) => {
            ROUND(COUNT(c.id) * COALESCE(l.cr, ?) , 2) AS est_sales,
            ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS est_rev
     FROM links l
-    LEFT JOIN clicks c ON c.slug = l.slug
+    LEFT JOIN clicks c ON c.slug = l.slug AND c.user_id = ?
+    WHERE l.user_id = ?
     GROUP BY l.slug
     ORDER BY clicks DESC
-  `).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV);
+  `).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV, req.user.id, req.user.id);
 
   res.send(`<!doctype html>
 <html>
@@ -382,19 +579,19 @@ app.get('/admin', requireAdmin, (req, res) => {
 });
 
 // ---------- CSV Exports ----------
-app.get('/admin/export/clicks.csv', requireAdmin, (req, res) => {
-  const rows = db.prepare('SELECT * FROM clicks ORDER BY id DESC').all();
+app.get('/admin/export/clicks.csv', requireAuth, (req, res) => {
+  const rows = db.prepare('SELECT * FROM clicks WHERE user_id = ? ORDER BY id DESC').all(req.user.id);
   res.setHeader('Content-Type', 'text/csv');
   res.send(toCSV(rows));
 });
 
-app.get('/admin/export/events.csv', requireAdmin, (req, res) => {
-  const rows = db.prepare('SELECT * FROM events ORDER BY id DESC').all();
+app.get('/admin/export/events.csv', requireAuth, (req, res) => {
+  const rows = db.prepare('SELECT * FROM events WHERE user_id = ? ORDER BY id DESC').all(req.user.id);
   res.setHeader('Content-Type', 'text/csv');
   res.send(toCSV(rows));
 });
 
-app.get('/admin/export/estimates.csv', requireAdmin, (req, res) => {
+app.get('/admin/export/estimates.csv', requireAuth, (req, res) => {
   const rows = db.prepare(`
     SELECT l.slug, l.partner, l.campaign,
            COUNT(c.id) AS clicks,
@@ -403,18 +600,17 @@ app.get('/admin/export/estimates.csv', requireAdmin, (req, res) => {
            ROUND(COUNT(c.id) * COALESCE(l.cr, ?) , 2) AS est_sales,
            ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS est_rev
     FROM links l
-    LEFT JOIN clicks c ON c.slug = l.slug
-    GROUP BY l.slug
-    ORDER BY clicks DESC
-  `).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV);
-  res.setHeader('Content-Type', 'text/csv');
-  res.send(toCSV(rows));
+    LEFT JOIN clicks c ON c.slug = l.slug AND c.user_id = ?
+WHERE l.user_id = ?
+GROUP BY l.slug
+ORDER BY clicks DESC
+`).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV, req.user.id, req.user.id);
+res.setHeader('Content-Type', 'text/csv');
+res.send(toCSV(rows));
 });
-
 // ---------- Health ----------
 app.get('/health', (req, res) => res.json({ ok: true }));
-
 // ---------- Start ----------
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+console.log(Server running on http://localhost:${PORT});
 });
