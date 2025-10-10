@@ -533,27 +533,37 @@ app.get('/', requireAuth, (req, res) => {
 
     <div class="card">
       <h2>Recent links</h2>
-      <table>
-        <thead><tr><th>Slug</th><th>Target</th><th>Partner</th><th>Campaign</th><th>CR</th><th>AOV</th></tr></thead>
-        <tbody>
-          ${links.map(l => `
-            <tr>
-              <td><a href="/r/${l.slug}" target="_blank">/r/${l.slug}</a></td>
-              <td style="max-width:360px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden">${l.target}</td>
-              <td>${l.partner || ''}</td>
-              <td>${l.campaign || ''}</td>
-              <td>${(((l.cr ?? DEFAULT_CR) * 100).toFixed(2))}%</td>
-              <td>$${l.aov ?? DEFAULT_AOV}</td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-  </div>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Slug</th>
+        <th>Target</th>
+        <th class="hide-sm">Partner</th>
+        <th class="hide-sm">Campaign</th>
+        <th class="hide-sm">CR</th>
+        <th>AOV</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${links.map(l => `
+        <tr>
+          <td><a href="/r/${l.slug}" target="_blank">/r/${l.slug}</a></td>
+          <td style="max-width:360px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden">${l.target}</td>
+          <td class="hide-sm">${l.partner || ''}</td>
+          <td class="hide-sm">${l.campaign || ''}</td>
+          <td class="hide-sm">${(((l.cr ?? DEFAULT_CR) * 100).toFixed(2))}%</td>
+          <td>$${l.aov ?? DEFAULT_AOV}</td>
+        </tr>`).join('')}
+    </tbody>
+  </table>
+</div>
+</div>
+</div>
 </div>
 </body>
 </html>`);
 });
-
 // ---------- Redirect ----------
 app.get('/r/:slug', (req, res) => {
   // Find link - try to match with any user since slugs should be unique across users for cleaner URLs
@@ -651,6 +661,44 @@ app.get('/admin', requireAuth, (req, res) => {
   td{color:var(--fg);border-bottom:1px solid #1f2937;padding:10px 8px}
   a{color:var(--link);text-decoration:none} a:hover{text-decoration:underline}
   .btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:600}
+/* === Mobile tweaks (≤ 720px) === */
+@media (max-width: 720px) {
+  .wrap { padding: 0 12px; }
+  h1 { font-size: 24px; line-height: 1.2; }
+  .header { flex-direction: column; gap: 10px; align-items: flex-start; }
+  .admin-btn, .logout-btn { width: 100%; text-align: center; }
+  .grid { grid-template-columns: 1fr; gap: 16px; }
+  .card { padding: 16px; }
+  label { margin: 8px 0 4px; }
+  input { padding: 14px; font-size: 16px; } /* nicer touch target */
+
+  /* Make tables scroll instead of squishing */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 640px; } /* keeps columns readable; scrolls on phone */
+
+  th, td { padding: 10px 12px; font-size: 14px; white-space: nowrap; }
+
+  /* Hide non-essential columns on small screens */
+  .hide-sm { display: none; }
+}
+  /* === Mobile tweaks (≤ 720px) for Admin === */
+@media (max-width: 720px) {
+  .wrap { padding: 0 12px; }
+  h1 { font-size: 24px; line-height: 1.2; }
+  .header { flex-direction: column; gap: 10px; align-items: flex-start; }
+  .home-btn { width: 100%; text-align: center; }
+
+  .grid { grid-template-columns: 1fr; gap: 16px; }
+  .card { padding: 16px; }
+
+  /* Scroll the big table */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 720px; }
+  th, td { padding: 10px 12px; font-size: 14px; white-space: nowrap; }
+
+  /* Optionally hide lower-value columns on phones */
+  .hide-sm { display: none; }
+}
 </style>
 </head>
 <body>
@@ -668,25 +716,38 @@ app.get('/admin', requireAuth, (req, res) => {
       <p><strong>Est Revenue: $${estTotal.toFixed(2)}</strong></p>
     </div>
     <div class="card">
-      <h2>Per Link — Estimated Sales & Revenue</h2>
-      <table>
-        <thead><tr><th>Slug</th><th>Partner</th><th>Campaign</th><th>Clicks</th><th>CR</th><th>AOV</th><th>Sales</th><th>Revenue</th></tr></thead>
-        <tbody>
-          ${bySlug.map(r => `
-            <tr>
-              <td><code style="background:#1f2937;color:#93c5fd;padding:2px 6px;border-radius:6px">${r.slug}</code></td>
-              <td>${r.partner || ''}</td>
-              <td>${r.campaign || ''}</td>
-              <td>${r.clicks}</td>
-              <td>${(r.cr * 100).toFixed(2)}%</td>
-              <td>$${r.aov.toFixed(2)}</td>
-              <td>${r.est_sales}</td>
-              <td>$${r.est_rev}</td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
-    </div>
-  </div>
+   <h2>Per Link — Estimated Sales & Revenue</h2>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Slug</th>
+        <th class="hide-sm">Partner</th>
+        <th class="hide-sm">Campaign</th>
+        <th>Clicks</th>
+        <th class="hide-sm">CR</th>
+        <th class="hide-sm">AOV</th>
+        <th>Sales</th>
+        <th>Revenue</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${bySlug.map(r => `
+        <tr>
+          <td><code style="background:#1f2937;color:#93c5fd;padding:2px 6px;border-radius:6px">${r.slug}</code></td>
+          <td class="hide-sm">${r.partner || ''}</td>
+          <td class="hide-sm">${r.campaign || ''}</td>
+          <td>${r.clicks}</td>
+          <td class="hide-sm">${(r.cr * 100).toFixed(2)}%</td>
+          <td class="hide-sm">$${r.aov.toFixed(2)}</td>
+          <td>${r.est_sales}</td>
+          <td>$${r.est_rev}</td>
+        </tr>`).join('')}
+    </tbody>
+  </table>
+</div>
+</div>
+</div>
 
   <div class="card" style="margin-top:24px;text-align:center">
     <h2>📊 Download Spreadsheets</h2>
