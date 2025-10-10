@@ -535,6 +535,27 @@ app.get('/r/:slug', (req, res) => {
   res.redirect(url.toString());
 });
 
+// --- Gumroad webhook: verify secret + log payload (step 1) ---
+app.post('/webhooks/gumroad', (req, res) => {
+  const provided =
+    req.get('x-gumroad-secret') ||  // header option
+    req.query.secret ||             // query option
+    (req.body && (req.body.secret || req.body.webhook_secret)); // body option
+
+  if (!process.env.GUMROAD_WEBHOOK_KEY) {
+    console.error('GUMROAD_WEBHOOK_KEY not set');
+    return res.status(500).send('server not configured');
+  }
+
+  if (!provided || provided !== process.env.GUMROAD_WEBHOOK_KEY) {
+    return res.status(401).send('bad secret');
+  }
+
+  // Gumroad usually posts application/x-www-form-urlencoded
+  console.log('✅ Gumroad webhook received:', req.body);
+  return res.status(200).send('ok');
+});
+
 // ---------- Admin ----------
 app.get('/admin', requireAuth, (req, res) => {
   const totals = db.prepare(`
