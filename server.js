@@ -583,6 +583,7 @@ app.post('/webhooks/gumroad', (req, res) => {
 });
 
 // ---------- Admin ----------
+// ---------- Admin ----------
 app.get('/admin', requireAuth, (req, res) => {
   const totals = db.prepare(`
     SELECT
@@ -604,6 +605,9 @@ app.get('/admin', requireAuth, (req, res) => {
     GROUP BY l.slug
     ORDER BY clicks DESC
   `).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV, req.user.id, req.user.id);
+
+  // NEW: total estimated revenue across all links
+  const estTotal = bySlug.reduce((sum, r) => sum + (Number(r.est_rev) || 0), 0);
 
   res.send(`<!doctype html>
 <html>
@@ -640,6 +644,7 @@ app.get('/admin', requireAuth, (req, res) => {
       <p>Total Views: ${totals.views || 0}</p>
       <p>Total Clicks: ${totals.clicks || 0}</p>
       <p>Avg Time: ${totals.avg_ms ? (totals.avg_ms/1000)+'s' : '—'}</p>
+      <p><strong>Est Revenue: $${estTotal.toFixed(2)}</strong></p>
     </div>
     <div class="card">
       <h2>Per Link — Estimated Sales & Revenue</h2>
