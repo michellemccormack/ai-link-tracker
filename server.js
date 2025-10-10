@@ -166,6 +166,32 @@ function slugify(text) {
     .replace(/^-+|-+$/g, '');
 }
 
+function ensureUserActive(email) {
+  const normalized = email.toLowerCase().trim();
+
+  // add an 'active' column if it doesn't exist yet (safe to run repeatedly)
+  try {
+    db.prepare(`ALTER TABLE users ADD COLUMN active INTEGER DEFAULT 1`).run();
+  } catch (_) { /* column already exists */ }
+
+  // does the user already exist?
+  const existing = db.prepare(`SELECT id FROM users WHERE email = ?`).get(normalized);
+  if (existing) {
+    // mark active (in case of re-activation after cancel/refund)
+    db.prepare(`UPDATE users SET active = 1 WHERE id = ?`).run(existing.id);
+    return { id: existing.id, created: false, tempPassword: null };
+    }
+
+  // create a new user with a temporary password
+  const tempPassword = crypto.randomBytes(8).toString('hex'); // 16 chars
+  const password_hash = hashPassword(tempPassword);
+  const result = db
+    .prepare(`INSERT INTO users (email, password_hash, active) VALUES (?, ?, 1)`)
+    .run(normalized, password_hash);
+
+  return { id: result.lastInsertRowid, created: true, tempPassword };
+}
+
 function toCSV(rows) {
   if (!rows.length) return '';
   const headers = Object.keys(rows[0]);
@@ -681,6 +707,52 @@ ORDER BY clicks DESC
 // ---------- Health ----------
 app.get('/health', (req, res) => res.json({ ok: true }));
 
+// other routes above…
+
+// --- Gumroad webhook: provision user (step 2) ---
+app.post('/webhooks/gumroad', (req, res) => {
+  const provided =
+    req.get('x-gumroad-secret') ||
+    req.query.secret ||
+    (req.body && (req.body.secret || req.body.webhook_secret));
+
+  if (!process.env.GUMROAD_WEBHOOK_KEY) {
+    console.error('GUMROAD_WEBHOOK_KEY not set');
+    return res.status(500).send('server not configured');
+  }
+  if (!provided || provided !== process.env.GUMROAD_WEBHOOK_KEY) {
+    return res.status(401).send('bad secret');
+  }
+
+  const email =
+    (req.body &&
+      (req.body.email ||
+        req.body.purchaser_email ||
+        req.body.buyer_email)) ||
+    '';
+  if (!email) {
+    console.warn('Gumroad webhook missing email:', req.body);
+    return res.status(400).send('missing email');
+  }
+
+  const result = ensureUserActive(email);
+
+  console.log('✅ Gumroad provisioned:', {
+    email,
+    created: result.created,
+    user_id: result.id
+  });
+  return res.status(200).json({
+    ok: true,
+    email,
+    created: result.created,
+    tempPassword: result.tempPassword
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
 // ---------- Start ----------
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
