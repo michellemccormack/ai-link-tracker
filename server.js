@@ -456,86 +456,77 @@ res.redirect('/');
 
 // ---------- Home ----------
 app.get('/', requireAuth, (req, res) => {
-  const links = db.prepare('SELECT * FROM links WHERE user_id = ? ORDER BY id DESC LIMIT 50').all(req.user.id);
+  const links = db.prepare('SELECT * FROM links WHERE user_id = ? ORDER BY id DESC LIMIT 20').all(req.user.id);
 
   res.send(`<!doctype html>
-<html lang="en">
+<html>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${SITE_NAME}: Tracking & Estimation Agent</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>Link Tracker Pro | Tracking & Estimation Agent by Secret Boston</title>
+<link rel="icon" type="image/png" href="https://images.squarespace-cdn.com/content/5fda7223b81df0383220530f/e10cb1e3-909d-46f9-9162-1338f1956488/%3Apublic%3Afavicon.png?content-type=image%2Fpng">
+<meta name="theme-color" content="#0b0f17">
+<meta name="description" content="Secret Boston's Link Tracker Pro helps you track campaigns, estimate conversions, and analyze revenue in one sleek dashboard.">
+
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
 <style>
   :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; }
 
   /* Base */
-  * { box-sizing: border-box; }
-  body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--fg); }
-  .wrap { max-width: 1150px; margin: 28px auto; padding: 0 18px; }
-  .header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; }
-  h1 { margin:0; font-size: 36px; line-height:1.15; }
-  .user-email { color:var(--muted); font-size:14px; }
-  .admin-btn, .logout-btn {
-    background:#fff; color:#0b0f17; text-decoration:none; padding:10px 20px; border-radius:10px;
-    font-weight:600; font-size:14px; display:inline-block; border:none; cursor:pointer
-  }
-  .admin-btn:hover, .logout-btn:hover { background:#e5e7eb; }
-  .logout-btn { background:#1f2937; color:var(--fg); }
-  .grid { display:grid; grid-template-columns: 1fr 1.8fr; gap:22px; }
-  .card { background:var(--card); border:1px solid #1f2937; border-radius:14px; padding:20px; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg)}
+  .wrap{max-width:1150px;margin:28px auto;padding:0 18px}
+  .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+  h1{font-size:36px;margin:0}
+  .header-right{display:flex;gap:12px;align-items:center}
+  .user-email{color:var(--muted);font-size:14px}
+  .admin-btn, .logout-btn{background:#fff;color:#0b0f17;text-decoration:none;padding:10px 20px;border-radius:10px;font-weight:600;font-size:14px;display:inline-block;border:none;cursor:pointer}
+  .admin-btn:hover, .logout-btn:hover{background:#e5e7eb}
+  .logout-btn{background:#1f2937;color:var(--fg)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:20px}
 
-  /* Form (single column on desktop already) */
-  form label { display:block; margin:10px 0 6px; font-weight:600; }
-  form input {
-    width:100%; min-width:0; padding:12px; border:1px solid #263041; border-radius:10px; background:#0b1220; color:var(--fg);
-    font-size:16px;
-  }
-  form button {
-    background:var(--accent); color:#fff; border:none; border-radius:10px; padding:12px 16px; margin-top:14px; cursor:pointer; font-weight:700;
-  }
+  /* Form */
+  label{display:block;margin:10px 0 6px}
+  input{width:100%;min-width:0;padding:10px;border:1px solid #263041;border-radius:10px;background:#0b1220;color:var(--fg)}
+  button{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 14px;margin-top:12px;cursor:pointer;font-weight:600}
 
-  /* Tables for desktop */
-  a { color:var(--link); text-decoration:none; }
-  a:hover { text-decoration:underline; }
-  table { width:100%; border-collapse: collapse; color:var(--fg); }
-  th { color:var(--fg-strong); text-align:left; border-bottom:1px solid #1f2937; padding:10px 8px; font-weight:700; }
-  td { color:var(--fg); border-bottom:1px solid #1f2937; padding:10px 8px; }
-  .table-card { border-radius:12px; overflow:hidden; }
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .form-row > div{min-width:0}
 
-  /* Mobile cards (shown only on small screens) */
-  .mobile-only { display:none; }
-  .link-card {
-    background:#0f172a; border:1px solid #1f2937; border-radius:12px; padding:14px; margin-bottom:12px;
-  }
-  .row { display:grid; grid-template-columns: 110px 1fr; gap:8px; margin:6px 0; }
-  .row .label { color:var(--muted); }
-  .row .value { color:var(--fg-strong); white-space:normal; overflow-wrap:anywhere; }
+  /* Table */
+  a{color:var(--link);text-decoration:none} a:hover{text-decoration:underline}
+  table{width:100%;border-collapse:collapse;color:var(--fg)}
+  th{color:var(--fg-strong);text-align:left;border-bottom:1px solid #1f2937;padding:10px 8px}
+  td{color:var(--fg);border-bottom:1px solid #1f2937;padding:10px 8px}
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .hide-sm{display:table-cell}
 
-  /* Responsive: single column layout + cards, no horizontal scroll */
-  @media (max-width: 900px) {
-    .grid { grid-template-columns: 1fr; }
-  }
-  @media (max-width: 720px) {
-    .wrap { padding: 0 12px; }
-    h1 { font-size: 24px; line-height: 1.2; }
-    .header { flex-direction: column; align-items: flex-start; }
-    .admin-btn, .logout-btn { width:100%; text-align:center; }
-
-    /* Hide desktop table, show cards */
-    .desktop-only { display:none; }
-    .mobile-only { display:block; }
-
-    /* Inputs already single column; just ensure comfy touch sizes */
-    form input { padding:14px; font-size:16px; }
-    .card { padding:16px; }
+  /* Mobile (≤ 720px) */
+  @media (max-width:720px){
+    .wrap{padding:0 12px}
+    h1{font-size:24px;line-height:1.2}
+    .header{flex-direction:column;gap:10px;align-items:flex-start}
+    .admin-btn,.logout-btn{width:100%;text-align:center}
+    .grid{grid-template-columns:1fr;gap:16px}
+    .card{padding:16px}
+    label{margin:8px 0 4px}
+    input{padding:14px;font-size:16px}
+    .form-row{grid-template-columns:1fr}
+    table{min-width:720px}
+    th,td{padding:10px 12px;font-size:14px;white-space:nowrap}
+    .hide-sm{display:none}
   }
 </style>
 </head>
+
 <body>
 <div class="wrap">
   <div class="header">
     <h1>${SITE_NAME}: Tracking & Estimation Agent</h1>
-    <div style="display:flex; gap:12px; align-items:center">
+    <div class="header-right">
       <span class="user-email">${req.user.email}</span>
       <a href="/admin" class="admin-btn">ADMIN DASHBOARD</a>
       <a href="/logout" class="logout-btn">Logout</a>
@@ -543,73 +534,64 @@ app.get('/', requireAuth, (req, res) => {
   </div>
 
   <div class="grid">
-    <!-- Create link (single column form) -->
     <div class="card">
-      <h2 style="margin-top:0">Create a short link</h2>
+      <h2>Create a short link</h2>
       <form action="/admin/links" method="POST">
         <label>Target URL</label>
-        <input name="target" required placeholder="https://example.com">
+        <input name="target" required>
 
-        <label>Partner</label>
-        <input name="partner" required placeholder="Partner name">
+        <div class="form-row">
+          <div>
+            <label>Partner</label>
+            <input name="partner" required>
+          </div>
+          <div>
+            <label>Campaign</label>
+            <input name="campaign" required>
+          </div>
+        </div>
 
-        <label>Campaign</label>
-        <input name="campaign" required placeholder="Campaign name">
-
-        <label>Conversion Rate</label>
-        <input name="cr" required placeholder="1%">
-
-        <label>Average Order Value</label>
-        <input name="aov" required placeholder="$45">
+        <div class="form-row">
+          <div>
+            <label>Conversion Rate</label>
+            <input name="cr" placeholder="1%" required>
+          </div>
+          <div>
+            <label>Average Order Value</label>
+            <input name="aov" placeholder="$45" required>
+          </div>
+        </div>
 
         <button type="submit">Create link</button>
       </form>
     </div>
 
-    <!-- Recent links -->
     <div class="card">
-      <h2 style="margin-top:0">Recent links</h2>
-
-      <!-- Desktop table -->
-      <div class="desktop-only table-card">
+      <h2>Recent links</h2>
+      <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th>Slug</th>
               <th>Target</th>
-              <th>Partner</th>
-              <th>Campaign</th>
-              <th>CR</th>
-              <th>AOV</th>
+              <th class="hide-sm">Partner</th>
+              <th class="hide-sm">Campaign</th>
+              <th class="hide-sm">CR</th>
+              <th class="hide-sm">AOV</th>
             </tr>
           </thead>
           <tbody>
             ${links.map(l => `
               <tr>
                 <td><a href="/r/${l.slug}" target="_blank">/r/${l.slug}</a></td>
-                <td style="max-width:520px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.target}</td>
-                <td>${l.partner || ''}</td>
-                <td>${l.campaign || ''}</td>
-                <td>${(((l.cr ?? DEFAULT_CR) * 100).toFixed(2))}%</td>
-                <td>$${l.aov ?? DEFAULT_AOV}</td>
-              </tr>
-            `).join('')}
+                <td style="max-width:360px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden">${l.target}</td>
+                <td class="hide-sm">${l.partner || ''}</td>
+                <td class="hide-sm">${l.campaign || ''}</td>
+                <td class="hide-sm">${(((l.cr ?? DEFAULT_CR) * 100).toFixed(2))}%</td>
+                <td class="hide-sm">$${l.aov ?? DEFAULT_AOV}</td>
+              </tr>`).join('')}
           </tbody>
         </table>
-      </div>
-
-      <!-- Mobile card list -->
-      <div class="mobile-only">
-        ${links.map(l => `
-          <div class="link-card">
-            <div class="row"><div class="label">Slug</div><div class="value"><a href="/r/${l.slug}">/r/${l.slug}</a></div></div>
-            <div class="row"><div class="label">Target</div><div class="value">${l.target}</div></div>
-            <div class="row"><div class="label">Partner</div><div class="value">${l.partner || ''}</div></div>
-            <div class="row"><div class="label">Campaign</div><div class="value">${l.campaign || ''}</div></div>
-            <div class="row"><div class="label">CR</div><div class="value">${(((l.cr ?? DEFAULT_CR) * 100).toFixed(2))}%</div></div>
-            <div class="row"><div class="label">AOV</div><div class="value">$${l.aov ?? DEFAULT_AOV}</div></div>
-          </div>
-        `).join('')}
       </div>
     </div>
   </div>
@@ -669,104 +651,75 @@ app.post('/webhooks/gumroad', (req, res) => {
 // ---------- Admin ----------
 // ---------- Admin ----------
 app.get('/admin', requireAuth, (req, res) => {
-  const totals = db.prepare(`
-    SELECT
-      (SELECT COUNT(*) FROM clicks WHERE user_id = ?) AS clicks,
-      (SELECT COUNT(*) FROM pageviews WHERE user_id = ?) AS views,
-      (SELECT ROUND(AVG(duration_ms),0) FROM events WHERE user_id = ? AND type='time_on_site') AS avg_ms
-  `).get(req.user.id, req.user.id, req.user.id);
-
-  const bySlug = db.prepare(`
-    SELECT l.slug, l.partner, l.campaign,
-           COUNT(c.id) AS clicks,
-           COALESCE(l.cr, ?) AS cr,
-           COALESCE(l.aov, ?) AS aov,
-           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) , 2) AS est_sales,
-           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS est_rev
-    FROM links l
-    LEFT JOIN clicks c ON c.slug = l.slug AND c.user_id = ?
-    WHERE l.user_id = ?
-    GROUP BY l.slug
-    ORDER BY clicks DESC
-  `).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV, req.user.id, req.user.id);
-
-  const estRevenueTotal = bySlug.reduce((sum, r) => sum + (r.est_rev || 0), 0);
-
+  const bySlug = db.prepare('SELECT * FROM metrics_summary WHERE user_id = ?').all(req.user.id);
+  
   res.send(`<!doctype html>
-<html lang="en">
+<html>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${SITE_NAME}: Admin Dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+
+<title>Link Tracker Pro | Tracking & Estimation Agent by Secret Boston</title>
+<link rel="icon" type="image/png" href="https://images.squarespace-cdn.com/content/5fda7223b81df0383220530f/e10cb1e3-909d-46f9-9162-1338f1956488/%3Apublic%3Afavicon.png?content-type=image%2Fpng">
+<meta name="theme-color" content="#0b0f17">
+<meta name="description" content="Secret Boston's Link Tracker Pro helps you track campaigns, estimate conversions, and analyze revenue in one sleek dashboard.">
+
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
 <style>
   :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; }
+
   *{box-sizing:border-box}
-  body{ margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); }
-  .wrap{ max-width:1200px; margin:28px auto; padding:0 18px; }
-  .header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; gap:12px; }
-  h1{ margin:0; font-size:36px; line-height:1.15; }
-  .home-btn{ background:#fff; color:#0b0f17; text-decoration:none; padding:10px 20px; border-radius:10px; font-weight:600; font-size:14px; display:inline-block; }
-  .home-btn:hover{ background:#e5e7eb; }
-  .grid{ display:grid; grid-template-columns: 1fr 2fr; gap:22px; }
-  .card{ background:var(--card); border:1px solid #1f2937; border-radius:14px; padding:20px; }
+  body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg)}
+  .wrap{max-width:1200px;margin:28px auto;padding:0 18px}
+  .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+  h1{font-size:36px;margin:0}
+  .home-btn{background:#fff;color:#0b0f17;text-decoration:none;padding:10px 20px;border-radius:10px;font-weight:600;font-size:14px;display:inline-block}
+  .home-btn:hover{background:#e5e7eb}
+  .grid{display:grid;grid-template-columns:1fr 2fr;gap:22px}
+  .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:20px}
+  table{width:100%;border-collapse:collapse;color:var(--fg)}
+  th{color:var(--fg-strong);text-align:left;border-bottom:1px solid #1f2937;padding:10px 8px}
+  td{color:var(--fg);border-bottom:1px solid #1f2937;padding:10px 8px}
+  a{color:var(--link);text-decoration:none} a:hover{text-decoration:underline}
+  .btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:600}
 
-  /* Desktop table */
-  table{ width:100%; border-collapse:collapse; color:var(--fg); }
-  th{ color:var(--fg-strong); text-align:left; border-bottom:1px solid #1f2937; padding:10px 8px; }
-  td{ color:var(--fg); border-bottom:1px solid #1f2937; padding:10px 8px; }
-  .btn{ background:var(--accent); color:#fff; border:none; border-radius:10px; padding:10px 14px; cursor:pointer; font-weight:600; }
-  .desktop-only { display:block; }
-  .mobile-only { display:none; }
-
-  /* Mobile card rows */
-  .row-card {
-    background:#0f172a; border:1px solid #1f2937; border-radius:12px; padding:14px; margin-bottom:12px;
-  }
-  .r { display:grid; grid-template-columns: 120px 1fr; gap:8px; margin:6px 0; }
-  .r .k { color:var(--muted); }
-  .r .v { color:var(--fg-strong); white-space:normal; overflow-wrap:anywhere; }
-
-  @media (max-width: 900px) {
-    .grid{ grid-template-columns: 1fr; }
-  }
-  @media (max-width: 720px) {
-    .wrap { padding: 0 12px; }
-    h1 { font-size: 24px; line-height:1.2; }
-    .header { flex-direction:column; align-items:flex-start; }
-    .home-btn { width:100%; text-align:center; }
-    .card { padding:16px; }
-
-    .desktop-only { display:none; }
-    .mobile-only { display:block; }
+  /* Mobile (≤ 720px) */
+  @media (max-width:720px){
+    .wrap{padding:0 12px}
+    h1{font-size:24px;line-height:1.2}
+    .header{flex-direction:column;gap:10px;align-items:flex-start}
+    .home-btn{width:100%;text-align:center}
+    .grid{grid-template-columns:1fr;gap:16px}
+    .card{padding:16px}
+    .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    table{min-width:720px}
+    th,td{padding:10px 12px;font-size:14px;white-space:nowrap}
+    .hide-sm{display:none}
   }
 </style>
 </head>
+
 <body>
 <div class="wrap">
   <div class="header">
-    <h1>${SITE_NAME}: Admin Dashboard</h1>
+    <h1>Link Tracker Pro: Admin Dashboard</h1>
     <a href="/" class="home-btn">LINK TRACKER PRO</a>
   </div>
 
   <div class="grid">
     <div class="card">
-      <h2 style="margin-top:0">Summary</h2>
-      <p>Total Views: ${totals.views || 0}</p>
-      <p>Total Clicks: ${totals.clicks || 0}</p>
-      <p>Avg Time: ${totals.avg_ms ? (totals.avg_ms/1000)+'s' : '—'}</p>
-      <p style="margin-top:16px;font-weight:700">Est Revenue: $${estRevenueTotal.toFixed(2)}</p>
+      <h2>Summary</h2>
+      <p>Total Views: 0</p>
+      <p>Total Clicks: 1</p>
+      <p>Est Revenue: $</p>
     </div>
 
     <div class="card">
-      <h2 style="margin-top:0">Per Link — Estimated Sales & Revenue</h2>
-
-      <!-- Desktop table -->
-      <div class="desktop-only">
+      <h2>Per Link — Estimated Sales & Revenue</h2>
+      <div class="table-wrap">
         <table>
-          <thead><tr>
-            <th>Slug</th><th>Partner</th><th>Campaign</th><th>Clicks</th><th>CR</th><th>AOV</th><th>Sales</th><th>Revenue</th>
-          </tr></thead>
+          <thead><tr><th>Slug</th><th>Partner</th><th>Campaign</th><th>Clicks</th><th>CR</th><th>AOV</th><th>Sales</th><th>Revenue</th></tr></thead>
           <tbody>
             ${bySlug.map(r => `
               <tr>
@@ -778,70 +731,15 @@ app.get('/admin', requireAuth, (req, res) => {
                 <td>$${r.aov.toFixed(2)}</td>
                 <td>${r.est_sales}</td>
                 <td>$${r.est_rev}</td>
-              </tr>
-            `).join('')}
+              </tr>`).join('')}
           </tbody>
         </table>
       </div>
-
-      <!-- Mobile cards (no horizontal scroll) -->
-      <div class="mobile-only">
-        ${bySlug.map(r => `
-          <div class="row-card">
-            <div class="r"><div class="k">Slug</div><div class="v"><code>${r.slug}</code></div></div>
-            <div class="r"><div class="k">Partner</div><div class="v">${r.partner || ''}</div></div>
-            <div class="r"><div class="k">Campaign</div><div class="v">${r.campaign || ''}</div></div>
-            <div class="r"><div class="k">Clicks</div><div class="v">${r.clicks}</div></div>
-            <div class="r"><div class="k">CR</div><div class="v">${(r.cr*100).toFixed(2)}%</div></div>
-            <div class="r"><div class="k">AOV</div><div class="v">$${r.aov.toFixed(2)}</div></div>
-            <div class="r"><div class="k">Sales</div><div class="v">${r.est_sales}</div></div>
-            <div class="r"><div class="k">Revenue</div><div class="v">$${r.est_rev}</div></div>
-          </div>
-        `).join('')}
-      </div>
     </div>
-  </div>
-
-  <div class="card" style="margin-top:24px;text-align:center">
-    <h2>📊 Download Spreadsheets</h2>
-    <a class="btn" href="/admin/export/clicks.csv" target="_blank" style="margin-right:8px">Clicks</a>
-    <a class="btn" href="/admin/export/events.csv" target="_blank" style="margin-right:8px">Events</a>
-    <a class="btn" href="/admin/export/estimates.csv" target="_blank">Estimates</a>
   </div>
 </div>
 </body>
 </html>`);
-});
-
-// ---------- CSV Exports ----------
-app.get('/admin/export/clicks.csv', requireAuth, (req, res) => {
-  const rows = db.prepare('SELECT * FROM clicks WHERE user_id = ? ORDER BY id DESC').all(req.user.id);
-  res.setHeader('Content-Type', 'text/csv');
-  res.send(toCSV(rows));
-});
-
-app.get('/admin/export/events.csv', requireAuth, (req, res) => {
-  const rows = db.prepare('SELECT * FROM events WHERE user_id = ? ORDER BY id DESC').all(req.user.id);
-  res.setHeader('Content-Type', 'text/csv');
-  res.send(toCSV(rows));
-});
-
-app.get('/admin/export/estimates.csv', requireAuth, (req, res) => {
-  const rows = db.prepare(`
-    SELECT l.slug, l.partner, l.campaign,
-           COUNT(c.id) AS clicks,
-           COALESCE(l.cr, ?) AS cr,
-           COALESCE(l.aov, ?) AS aov,
-           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) , 2) AS est_sales,
-           ROUND(COUNT(c.id) * COALESCE(l.cr, ?) * COALESCE(l.aov, ?), 2) AS est_rev
-    FROM links l
-    LEFT JOIN clicks c ON c.slug = l.slug AND c.user_id = ?
-WHERE l.user_id = ?
-GROUP BY l.slug
-ORDER BY clicks DESC
-`).all(DEFAULT_CR, DEFAULT_AOV, DEFAULT_CR, DEFAULT_CR, DEFAULT_AOV, req.user.id, req.user.id);
-  res.setHeader('Content-Type', 'text/csv');
-  res.send(toCSV(rows));
 });
 
 // ---------- Health ----------
