@@ -488,12 +488,11 @@ app.get('/', requireAuth, (req, res) => {
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
   .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:20px}
 
-  /* Form */
+  /* Form — single column on desktop */
   label{display:block;margin:10px 0 6px}
   input{width:100%;min-width:0;padding:10px;border:1px solid #263041;border-radius:10px;background:#0b1220;color:var(--fg)}
   button{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 14px;margin-top:12px;cursor:pointer;font-weight:600}
-
-  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .form-row{display:grid;grid-template-columns:1fr;gap:10px}   /* ← force single column */
   .form-row > div{min-width:0}
 
   /* Table */
@@ -514,9 +513,12 @@ app.get('/', requireAuth, (req, res) => {
     .card{padding:16px}
     label{margin:8px 0 4px}
     input{padding:14px;font-size:16px}
-    .form-row{grid-template-columns:1fr}
+
+    /* tables scroll instead of squish */
     table{min-width:720px}
     th,td{padding:10px 12px;font-size:14px;white-space:nowrap}
+
+    /* hide lower-priority cols */
     .hide-sm{display:none}
   }
 </style>
@@ -668,9 +670,7 @@ app.get('/admin', requireAuth, (req, res) => {
 
 <style>
   :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; }
-
-  *{box-sizing:border-box}
-  body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg)}
+  *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg)}
   .wrap{max-width:1200px;margin:28px auto;padding:0 18px}
   .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
   h1{font-size:36px;margin:0}
@@ -678,11 +678,15 @@ app.get('/admin', requireAuth, (req, res) => {
   .home-btn:hover{background:#e5e7eb}
   .grid{display:grid;grid-template-columns:1fr 2fr;gap:22px}
   .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:20px}
+
+  /* Tables */
   table{width:100%;border-collapse:collapse;color:var(--fg)}
   th{color:var(--fg-strong);text-align:left;border-bottom:1px solid #1f2937;padding:10px 8px}
   td{color:var(--fg);border-bottom:1px solid #1f2937;padding:10px 8px}
   a{color:var(--link);text-decoration:none} a:hover{text-decoration:underline}
   .btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:600}
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .hide-sm{display:table-cell}
 
   /* Mobile (≤ 720px) */
   @media (max-width:720px){
@@ -692,6 +696,8 @@ app.get('/admin', requireAuth, (req, res) => {
     .home-btn{width:100%;text-align:center}
     .grid{grid-template-columns:1fr;gap:16px}
     .card{padding:16px}
+
+    /* Scroll the big table; hide low-priority cols */
     .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
     table{min-width:720px}
     th,td{padding:10px 12px;font-size:14px;white-space:nowrap}
