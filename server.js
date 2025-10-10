@@ -324,7 +324,7 @@ app.get('/login', (req, res) => {
     <button type="submit">Log In</button>
   </form>
   <div class="link">
-    Don't have an account? <a href="/register">Sign up</a>
+    Don’t have an account? <a href="${process.env.PAYWALL_URL || 'https://2561082560880.gumroad.com/l/almer'}" target="_blank">Sign up</a>
   </div>
 </div>
 </body>
