@@ -468,7 +468,10 @@ app.get('/', requireAuth, (req, res) => {
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
   :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; }
-  *{box-sizing;border-box} body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg)}
+
+  /* Base */
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg)}
   .wrap{max-width:1150px;margin:28px auto;padding:0 18px}
   .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
   h1{font-size:36px;margin:0}
@@ -479,13 +482,45 @@ app.get('/', requireAuth, (req, res) => {
   .logout-btn{background:#1f2937;color:var(--fg)}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
   .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:20px}
+
+  /* Form */
   label{display:block;margin:10px 0 6px}
-  input{width:100%;padding:10px;border:1px solid #263041;border-radius:10px;background:#0b1220;color:var(--fg)}
+  input{width:100%;min-width:0;padding:10px;border:1px solid #263041;border-radius:10px;background:#0b1220;color:var(--fg)}
   button{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 14px;margin-top:12px;cursor:pointer;font-weight:600}
+
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  /* ensure no overlap / shrinking on narrow widths */
+  .form-row > div{min-width:0}
+
+  /* Table */
   a{color:var(--link);text-decoration:none} a:hover{text-decoration:underline}
   table{width:100%;border-collapse:collapse;color:var(--fg)}
   th{color:var(--fg-strong);text-align:left;border-bottom:1px solid #1f2937;padding:10px 8px}
   td{color:var(--fg);border-bottom:1px solid #1f2937;padding:10px 8px}
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .hide-sm{display:table-cell}
+
+  /* Mobile (≤ 720px) */
+  @media (max-width:720px){
+    .wrap{padding:0 12px}
+    h1{font-size:24px;line-height:1.2}
+    .header{flex-direction:column;gap:10px;align-items:flex-start}
+    .admin-btn,.logout-btn{width:100%;text-align:center}
+    .grid{grid-template-columns:1fr;gap:16px}
+    .card{padding:16px}
+    label{margin:8px 0 4px}
+    input{padding:14px;font-size:16px}
+
+    /* stack paired inputs */
+    .form-row{grid-template-columns:1fr}
+
+    /* tables scroll instead of squish */
+    table{min-width:720px}
+    th,td{padding:10px 12px;font-size:14px;white-space:nowrap}
+
+    /* optional: hide lower-priority cols on phones */
+    .hide-sm{display:none}
+  }
 </style>
 </head>
 <body>
@@ -498,68 +533,69 @@ app.get('/', requireAuth, (req, res) => {
       <a href="/logout" class="logout-btn">Logout</a>
     </div>
   </div>
+
   <div class="grid">
     <div class="card">
       <h2>Create a short link</h2>
-   <form action="/admin/links" method="POST" class="form">
-  <label>Target URL</label>
-  <input name="target" required>
+      <form action="/admin/links" method="POST">
+        <label>Target URL</label>
+        <input name="target" required>
 
-  <div class="row">
-    <div class="field">
-      <label>Partner</label>
-      <input name="partner" required>
-    </div>
-    <div class="field">
-      <label>Campaign</label>
-      <input name="campaign" required>
-    </div>
-  </div>
+        <div class="form-row">
+          <div>
+            <label>Partner</label>
+            <input name="partner" required>
+          </div>
+          <div>
+            <label>Campaign</label>
+            <input name="campaign" required>
+          </div>
+        </div>
 
-  <div class="row">
-    <div class="field">
-      <label>Conversion Rate</label>
-      <input name="cr" placeholder="1%" required>
-    </div>
-    <div class="field">
-      <label>Average Order Value</label>
-      <input name="aov" placeholder="$45" required>
-    </div>
-  </div>
+        <div class="form-row">
+          <div>
+            <label>Conversion Rate</label>
+            <input name="cr" placeholder="1%" required>
+          </div>
+          <div>
+            <label>Average Order Value</label>
+            <input name="aov" placeholder="$45" required>
+          </div>
+        </div>
 
-  <button type="submit">Create link</button>
-</form>
+        <button type="submit">Create link</button>
+      </form>
     </div>
 
     <div class="card">
       <h2>Recent links</h2>
-<div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th>Slug</th>
-        <th>Target</th>
-        <th class="hide-sm">Partner</th>
-        <th class="hide-sm">Campaign</th>
-        <th class="hide-sm">CR</th>
-        <th>AOV</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${links.map(l => `
-        <tr>
-          <td><a href="/r/${l.slug}" target="_blank">/r/${l.slug}</a></td>
-          <td style="max-width:360px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden">${l.target}</td>
-          <td class="hide-sm">${l.partner || ''}</td>
-          <td class="hide-sm">${l.campaign || ''}</td>
-          <td class="hide-sm">${(((l.cr ?? DEFAULT_CR) * 100).toFixed(2))}%</td>
-          <td>$${l.aov ?? DEFAULT_AOV}</td>
-        </tr>`).join('')}
-    </tbody>
-  </table>
-</div>
-</div>
-</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Slug</th>
+              <th>Target</th>
+              <th class="hide-sm">Partner</th>
+              <th class="hide-sm">Campaign</th>
+              <th class="hide-sm">CR</th>
+              <th class="hide-sm">AOV</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${links.map(l => `
+              <tr>
+                <td><a href="/r/${l.slug}" target="_blank">/r/${l.slug}</a></td>
+                <td style="max-width:360px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden">${l.target}</td>
+                <td class="hide-sm">${l.partner || ''}</td>
+                <td class="hide-sm">${l.campaign || ''}</td>
+                <td class="hide-sm">${(((l.cr ?? DEFAULT_CR) * 100).toFixed(2))}%</td>
+                <td class="hide-sm">$${l.aov ?? DEFAULT_AOV}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </div>
 </body>
 </html>`);
@@ -648,7 +684,10 @@ app.get('/admin', requireAuth, (req, res) => {
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
   :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; }
-  *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg)}
+
+  /* Base layout */
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg)}
   .wrap{max-width:1200px;margin:28px auto;padding:0 18px}
   .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
   h1{font-size:36px;margin:0}
@@ -661,44 +700,28 @@ app.get('/admin', requireAuth, (req, res) => {
   td{color:var(--fg);border-bottom:1px solid #1f2937;padding:10px 8px}
   a{color:var(--link);text-decoration:none} a:hover{text-decoration:underline}
   .btn{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:600}
-/* === Mobile tweaks (≤ 720px) === */
-@media (max-width: 720px) {
-  .wrap { padding: 0 12px; }
-  h1 { font-size: 24px; line-height: 1.2; }
-  .header { flex-direction: column; gap: 10px; align-items: flex-start; }
-  .admin-btn, .logout-btn { width: 100%; text-align: center; }
-  .grid { grid-template-columns: 1fr; gap: 16px; }
-  .card { padding: 16px; }
-  label { margin: 8px 0 4px; }
-  input { padding: 14px; font-size: 16px; } /* nicer touch target */
 
-  /* Make tables scroll instead of squishing */
+  /* Helpers for responsive tables */
   .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  table { min-width: 640px; } /* keeps columns readable; scrolls on phone */
+  .hide-sm { display: table-cell; }
 
-  th, td { padding: 10px 12px; font-size: 14px; white-space: nowrap; }
+  /* === Mobile tweaks (≤ 720px) === */
+  @media (max-width: 720px) {
+    .wrap { padding: 0 12px; }
+    h1 { font-size: 24px; line-height: 1.2; }
+    .header { flex-direction: column; gap: 10px; align-items: flex-start; }
+    .home-btn { width: 100%; text-align: center; }
 
-  /* Hide non-essential columns on small screens */
-  .hide-sm { display: none; }
-}
-  /* === Mobile tweaks (≤ 720px) for Admin === */
-@media (max-width: 720px) {
-  .wrap { padding: 0 12px; }
-  h1 { font-size: 24px; line-height: 1.2; }
-  .header { flex-direction: column; gap: 10px; align-items: flex-start; }
-  .home-btn { width: 100%; text-align: center; }
+    .grid { grid-template-columns: 1fr; gap: 16px; }
+    .card { padding: 16px; }
 
-  .grid { grid-template-columns: 1fr; gap: 16px; }
-  .card { padding: 16px; }
+    /* Make the table scroll horizontally on phones */
+    table { min-width: 720px; }
+    th, td { padding: 10px 12px; font-size: 14px; white-space: nowrap; }
 
-  /* Scroll the big table */
-  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  table { min-width: 720px; }
-  th, td { padding: 10px 12px; font-size: 14px; white-space: nowrap; }
-
-  /* Optionally hide lower-value columns on phones */
-  .hide-sm { display: none; }
-}
+    /* Hide lower-priority columns on small screens */
+    .hide-sm { display: none; }
+  }
 </style>
 </head>
 <body>
