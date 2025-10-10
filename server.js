@@ -455,79 +455,80 @@ res.redirect('/');
 });
 
 // ---------- Home ----------
+// ---------- Tracker (home) — desktop table + mobile cards ----------
 app.get('/', requireAuth, (req, res) => {
-  const links = db.prepare('SELECT * FROM links WHERE user_id = ? ORDER BY id DESC LIMIT 20').all(req.user.id);
+  const links = db
+    .prepare('SELECT * FROM links WHERE user_id = ? ORDER BY id DESC LIMIT 20')
+    .all(req.user.id);
 
   res.send(`<!doctype html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Link Tracker Pro | Tracking & Estimation Agent by Secret Boston</title>
-<link rel="icon" type="image/png" href="https://images.squarespace-cdn.com/content/5fda7223b81df0383220530f/e10cb1e3-909d-46f9-9162-1338f1956488/%3Apublic%3Afavicon.png?content-type=image%2Fpng">
-<meta name="theme-color" content="#0b0f17">
-<meta name="description" content="Secret Boston's Link Tracker Pro helps you track campaigns, estimate conversions, and analyze revenue in one sleek dashboard.">
-
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet" />
+<link rel="icon" href="https://images.squarespace-cdn.com/content/5fda7223b81df0383220530f/e10cb1e3-909d-46f9-9162-1338f1956488/%3Apublic%3Afavicon.png?content-type=image%2Fpng" sizes="32x32" />
 <style>
-  :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; }
+  :root { --bg:#0b0f17; --card:#111827; --muted:#9ca3af; --fg:#e5e7eb; --fg-strong:#f9fafb; --accent:#4f46e5; --link:#38bdf8; --chip:#1f2937; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--fg); font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  .wrap{ max-width:1150px; margin:28px auto; padding:0 18px; }
+  .header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  h1{ font-size:36px; margin:0; }
+  .header-right{ display:flex; gap:12px; align-items:center; }
+  .user-email{ color:var(--muted); font-size:14px; }
+  .admin-btn, .logout-btn{ background:#fff; color:#0b0f17; text-decoration:none; padding:10px 20px; border-radius:10px; font-weight:600; font-size:14px; display:inline-block; border:none; cursor:pointer; }
+  .logout-btn{ background:#1f2937; color:var(--fg); }
+  .admin-btn:hover{ background:#e5e7eb; }
 
-  /* Base */
-  *{box-sizing:border-box}
-  body{margin:0;font-family:Inter,system-ui,-apple-system;background:var(--bg);color:var(--fg)}
-  .wrap{max-width:1150px;margin:28px auto;padding:0 18px}
-  .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-  h1{font-size:36px;margin:0}
-  .header-right{display:flex;gap:12px;align-items:center}
-  .user-email{color:var(--muted);font-size:14px}
-  .admin-btn, .logout-btn{background:#fff;color:#0b0f17;text-decoration:none;padding:10px 20px;border-radius:10px;font-weight:600;font-size:14px;display:inline-block;border:none;cursor:pointer}
-  .admin-btn:hover, .logout-btn:hover{background:#e5e7eb}
-  .logout-btn{background:#1f2937;color:var(--fg)}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
-  .card{background:var(--card);border:1px solid #1f2937;border-radius:14px;padding:20px}
+  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+  .card{ background:var(--card); border:1px solid #1f2937; border-radius:14px; padding:20px; }
 
-  /* Form — single column on desktop */
-  label{display:block;margin:10px 0 6px}
-  input{width:100%;min-width:0;padding:10px;border:1px solid #263041;border-radius:10px;background:#0b1220;color:var(--fg)}
-  button{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 14px;margin-top:12px;cursor:pointer;font-weight:600}
-  .form-row{display:grid;grid-template-columns:1fr;gap:10px}   /* ← force single column */
-  .form-row > div{min-width:0}
+  /* form */
+  label{ display:block; margin:10px 0 6px; }
+  input{ width:100%; min-width:0; padding:10px; border:1px solid #263041; border-radius:10px; background:#0b1220; color:var(--fg); }
+  button{ background:var(--accent); color:#fff; border:none; border-radius:10px; padding:10px 14px; margin-top:12px; cursor:pointer; font-weight:600; }
+  .form-row{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .form-row > div{ min-width:0; }
 
-  /* Table */
-  a{color:var(--link);text-decoration:none} a:hover{text-decoration:underline}
-  table{width:100%;border-collapse:collapse;color:var(--fg)}
-  th{color:var(--fg-strong);text-align:left;border-bottom:1px solid #1f2937;padding:10px 8px}
-  td{color:var(--fg);border-bottom:1px solid #1f2937;padding:10px 8px}
-  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  .hide-sm{display:table-cell}
+  /* table (desktop) */
+  a{ color:var(--link); text-decoration:none; } a:hover{ text-decoration:underline; }
+  .table-wrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  table{ width:100%; border-collapse:collapse; color:var(--fg); }
+  th{ color:var(--fg-strong); text-align:left; border-bottom:1px solid #1f2937; padding:10px 8px; }
+  td{ color:var(--fg); border-bottom:1px solid #1f2937; padding:10px 8px; }
+  .table-desktop{ display:block; }
+  .list-mobile{ display:none; }
 
-  /* Mobile (≤ 720px) */
-  @media (max-width:720px){
-    .wrap{padding:0 12px}
-    h1{font-size:24px;line-height:1.2}
-    .header{flex-direction:column;gap:10px;align-items:flex-start}
-    .admin-btn,.logout-btn{width:100%;text-align:center}
-    .grid{grid-template-columns:1fr;gap:16px}
-    .card{padding:16px}
-    label{margin:8px 0 4px}
-    input{padding:14px;font-size:16px}
+  /* mobile card list */
+  .mrow{ display:flex; flex-direction:column; gap:8px; background:var(--card); border:1px solid #1f2937; border-radius:12px; padding:14px; }
+  .mline{ display:flex; justify-content:space-between; gap:12px; }
+  .mleft{ color:var(--muted); font-size:12px; }
+  .mright{ font-weight:600; }
+  .slug-chip{ background:var(--chip); color:#93c5fd; padding:2px 6px; border-radius:6px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; display:inline-block; }
 
-    /* tables scroll instead of squish */
-    table{min-width:720px}
-    th,td{padding:10px 12px;font-size:14px;white-space:nowrap}
+  /* mobile (≤ 720px) */
+  @media (max-width: 720px){
+    .wrap{ padding:0 12px; }
+    h1{ font-size:24px; line-height:1.2; }
+    .header{ flex-direction:column; gap:10px; align-items:flex-start; }
+    .admin-btn,.logout-btn{ width:100%; text-align:center; }
+    .grid{ grid-template-columns:1fr; gap:16px; }
+    .card{ padding:16px; }
+    label{ margin:8px 0 4px; }
+    input{ padding:14px; font-size:16px; }
+    .form-row{ grid-template-columns:1fr; }   /* stack inputs on phones */
 
-    /* hide lower-priority cols */
-    .hide-sm{display:none}
+    .table-desktop{ display:none; }          /* hide table on phones */
+    .list-mobile{ display:flex; flex-direction:column; gap:12px; } /* show cards */
   }
 </style>
 </head>
-
 <body>
 <div class="wrap">
   <div class="header">
-    <h1>${SITE_NAME}: Tracking & Estimation Agent</h1>
+    <h1>Link Tracker Pro: Tracking & Estimation Agent</h1>
     <div class="header-right">
       <span class="user-email">${req.user.email}</span>
       <a href="/admin" class="admin-btn">ADMIN DASHBOARD</a>
@@ -570,16 +571,18 @@ app.get('/', requireAuth, (req, res) => {
 
     <div class="card">
       <h2>Recent links</h2>
-      <div class="table-wrap">
+
+      <!-- Desktop table -->
+      <div class="table-wrap table-desktop">
         <table>
           <thead>
             <tr>
               <th>Slug</th>
               <th>Target</th>
-              <th class="hide-sm">Partner</th>
-              <th class="hide-sm">Campaign</th>
-              <th class="hide-sm">CR</th>
-              <th class="hide-sm">AOV</th>
+              <th>Partner</th>
+              <th>Campaign</th>
+              <th>CR</th>
+              <th>AOV</th>
             </tr>
           </thead>
           <tbody>
@@ -587,13 +590,27 @@ app.get('/', requireAuth, (req, res) => {
               <tr>
                 <td><a href="/r/${l.slug}" target="_blank">/r/${l.slug}</a></td>
                 <td style="max-width:360px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden">${l.target}</td>
-                <td class="hide-sm">${l.partner || ''}</td>
-                <td class="hide-sm">${l.campaign || ''}</td>
-                <td class="hide-sm">${(((l.cr ?? DEFAULT_CR) * 100).toFixed(2))}%</td>
-                <td class="hide-sm">$${l.aov ?? DEFAULT_AOV}</td>
+                <td>${l.partner || ''}</td>
+                <td>${l.campaign || ''}</td>
+                <td>${(((l.cr ?? ${DEFAULT_CR}) * 100).toFixed(2))}%</td>
+                <td>$${l.aov ?? ${DEFAULT_AOV}}</td>
               </tr>`).join('')}
           </tbody>
         </table>
+      </div>
+
+      <!-- Mobile card list -->
+      <div class="list-mobile">
+        ${links.map(l => `
+          <div class="mrow">
+            <div class="mline"><span class="mleft">Slug</span><span class="mright"><a href="/r/${l.slug}" target="_blank" class="slug-chip">/r/${l.slug}</a></span></div>
+            <div class="mline"><span class="mleft">Target</span><span class="mright" style="max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.target}</span></div>
+            <div class="mline"><span class="mleft">Partner</span><span class="mright">${l.partner || ''}</span></div>
+            <div class="mline"><span class="mleft">Campaign</span><span class="mright">${l.campaign || ''}</span></div>
+            <div class="mline"><span class="mleft">CR</span><span class="mright">${(((l.cr ?? ${DEFAULT_CR}) * 100).toFixed(2))}%</span></div>
+            <div class="mline"><span class="mleft">AOV</span><span class="mright">$${l.aov ?? ${DEFAULT_AOV}}</span></div>
+          </div>
+        `).join('')}
       </div>
     </div>
   </div>
