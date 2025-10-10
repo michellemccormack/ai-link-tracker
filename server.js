@@ -398,34 +398,6 @@ app.get('/logout', (req, res) => {
   res.redirect('/login');
 });
 
-// --- TEMP: admin password reset route (REMOVE AFTER USE) ---
-app.post('/dev/reset-password', (req, res) => {
-  try {
-    const token = req.get('x-admin-token');
-    if (!token || token !== process.env.ADMIN_RESET_TOKEN) {
-      return res.status(401).json({ ok: false, error: 'unauthorized' });
-    }
-
-    const { email, newPassword } = req.body || {};
-    if (!email || !newPassword || newPassword.length < 8) {
-      return res.status(400).json({ ok: false, error: 'email and newPassword (>=8) required' });
-    }
-
-    const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase().trim());
-    if (!user) return res.status(404).json({ ok: false, error: 'user not found' });
-
-    const newHash = hashPassword(newPassword);
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, user.id);
-    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id); // force re-login
-
-    return res.json({ ok: true, email });
-  } catch (e) {
-    console.error('reset-password error:', e);
-    return res.status(500).json({ ok: false, error: 'server_error' });
-  }
-});
-// --- END TEMP ---
-
 // ---------- Create link ----------
 app.post('/admin/links', requireAuth, (req, res) => {
   const { target, partner, campaign, cr, aov } = req.body;
