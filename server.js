@@ -355,6 +355,38 @@ app.post('/login', (req, res) => {
   });
   res.redirect('/');
 });
+// --- DEV: admin password reset endpoint (temporary) ---
+const ADMIN_RESET_TOKEN = process.env.ADMIN_RESET_TOKEN || '';
+
+app.post('/dev/reset-password', (req, res) => {
+  // Disable if no token configured
+  if (!ADMIN_RESET_TOKEN) return res.status(404).send('disabled');
+
+  // Check admin header
+  const headerToken = req.headers['x-admin-token'];
+  if (!headerToken || headerToken !== ADMIN_RESET_TOKEN) {
+    return res.status(403).send('forbidden');
+  }
+
+  const { email, newPassword } = req.body || {};
+  if (!email || !newPassword) {
+    return res.status(400).send('missing email or newPassword');
+  }
+
+  const user = db.prepare('SELECT id FROM users WHERE email = ?')
+                 .get(email.toLowerCase().trim());
+  if (!user) return res.status(404).send('user not found');
+
+  const passwordHash = hashPassword(newPassword);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+    .run(passwordHash, user.id);
+
+  // Invalidate existing sessions for safety
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+
+  res.json({ ok: true, email: email.toLowerCase().trim() });
+});
+// --- end DEV reset endpoint ---
 
 // Logout
 app.get('/logout', (req, res) => {
@@ -365,6 +397,34 @@ app.get('/logout', (req, res) => {
   res.clearCookie('session_token', { path: '/' });
   res.redirect('/login');
 });
+
+// --- TEMP: admin password reset route (REMOVE AFTER USE) ---
+app.post('/dev/reset-password', (req, res) => {
+  try {
+    const token = req.get('x-admin-token');
+    if (!token || token !== process.env.ADMIN_RESET_TOKEN) {
+      return res.status(401).json({ ok: false, error: 'unauthorized' });
+    }
+
+    const { email, newPassword } = req.body || {};
+    if (!email || !newPassword || newPassword.length < 8) {
+      return res.status(400).json({ ok: false, error: 'email and newPassword (>=8) required' });
+    }
+
+    const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase().trim());
+    if (!user) return res.status(404).json({ ok: false, error: 'user not found' });
+
+    const newHash = hashPassword(newPassword);
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, user.id);
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id); // force re-login
+
+    return res.json({ ok: true, email });
+  } catch (e) {
+    console.error('reset-password error:', e);
+    return res.status(500).json({ ok: false, error: 'server_error' });
+  }
+});
+// --- END TEMP ---
 
 // ---------- Create link ----------
 app.post('/admin/links', requireAuth, (req, res) => {
